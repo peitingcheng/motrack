@@ -15,9 +15,20 @@ body {
 
 .grid-container {
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 10px;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 20px;
     width: 100%;
+}
+
+.canvas-container {
+    background-color: rgba(255, 255, 255, 0.1);
+    padding: 10px;
+    border-radius: 5px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    aspect-ratio: 1;
+    position: relative;
+    width: 250px;
+    height: 250px;
 }
 
 .skeleton-container {
@@ -50,7 +61,6 @@ canvas {
 
 .title {
     text-align: left;
-    margin-bottom: 20px;
     color: #c9c9c9;
     font-size: 32px;
 }

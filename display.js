@@ -1,11 +1,12 @@
 class SkeletonAnimation {
-  constructor(jsonPath, lineColor, pointColor) {
+  constructor(jsonPath, lineColor, pointColor, category) {
     this.jsonPath = jsonPath;
     this.poses = [];
     this.currentFrame = 0;
     this.lastFrameTime = 0;
     this.lineColor = lineColor || color(0, 80, 90, 255);
     this.pointColor = pointColor || color(0, 80, 90, 255);
+    this.category = category; // 0-4 for different categories
     this.connections = [
       // 臉部連接
       [0, 1], [1, 2], [2, 3], [3, 7], [0, 4], [4, 5], [5, 6], [6, 8],
@@ -29,7 +30,7 @@ class SkeletonAnimation {
     if (this.poses.length === 0) return;
 
     let now = millis();
-    if (now - this.lastFrameTime > 70) { // 約30fps
+    if (now - this.lastFrameTime > 100) { //fps
       this.currentFrame = (this.currentFrame + 1) % this.poses.length;
       this.lastFrameTime = now;
     }
@@ -41,8 +42,43 @@ class SkeletonAnimation {
     let currentPose = this.poses[this.currentFrame];
     if (currentPose) {
       push();
-      translate(width, 0);
-      scale(-1, 1);
+      
+            // // Apply translation based on category
+            // switch(this.category) {
+            //   case 1: // Top left
+            //     translate(width * 0.3, height * 0.01);
+            //     break;
+            //   case 2: // Top center
+            //     translate(width * 0.6, height * 0.01);
+            //     break;
+            //   case 3: // Top right
+            //     translate(width * 0.9, height * 0.01);
+            //     break;
+            //   case 4: // Bottom left
+            //     translate(width * 0.3, height * 0.5);
+            //     break;
+            //   case 5: // Bottom center
+            //     translate(width * 0.6, height * 0.5);
+            //     break;
+            // }
+
+      // Calculate grid position based on category
+      const gridSize = 250;
+      const margin = 60;
+      const cols = Math.floor(width / (gridSize + margin));
+      const row = Math.floor((this.category - 1) / cols);
+      const col = (this.category - 1) % cols;
+      
+      // Calculate position
+      const x = col * (gridSize + margin) + margin;
+      const y = row * (gridSize + margin) + margin;
+      
+      // Apply translation
+      translate(x, y);
+      
+      // Scale to fit 250x250 box
+      scale(0.5);
+      
       this.drawPoseSet(
         [{ keypoints: currentPose.keypoints }],
         this.lineColor,
@@ -64,7 +100,7 @@ class SkeletonAnimation {
         let pointB = pose.keypoints[connection[1]];
         if (pointA.confidence > 0.1 && pointB.confidence > 0.1) {
           stroke(lineColor);
-          strokeWeight(10);
+          strokeWeight(2);
           line(pointA.x, pointA.y, pointB.x, pointB.y);
         }
       }
@@ -73,8 +109,12 @@ class SkeletonAnimation {
       for (let keypoint of pose.keypoints) {
         if (keypoint.confidence > 0.1) {
           fill(pointColor1);
+          //noFill();
           noStroke();
-          circle(keypoint.x, keypoint.y, 8);
+          //stroke(pointColor1);
+          strokeWeight(3);
+          circle(keypoint.x, keypoint.y, 10);
+          //circle(keypoint.x, keypoint.y, random(4, 30));
         }
       }
     }
@@ -90,42 +130,73 @@ class SkeletonAnimation {
 let skeletonAnimations = [];
 
 function preload() {
-  // Define the list of JSON files
-  const jsonFiles = [
-    'pose-recording-0001.json',
-    'pose-recording-0002.json',
-    'pose-recording-0003.json',
-    'pose-recording-0004.json',
-    'pose-recording-2001.json',
-    'pose-recording-4001.json'
-  ];
-  
-  // Process each JSON file
-  jsonFiles.forEach((file, index) => {
-    // Use different colors for different animations
-    let hue = (index * 60) % 360; // 60 degrees per color
-    let lineColor = color(hue, 80, 190, 255);
-    let pointColor = color((hue + 120) % 360, 180, 90, 255);
+    // 請求檔案系統存取權限
+    const skeletonDataDir = 'assets/SkeletonData';
     
-    // Create the full path
-    const fullPath = `assets/SkeletonData/${file}`;
-    console.log(`Loading animation ${index + 1}: ${fullPath}`);
-
-    skeletonAnimations.push(new SkeletonAnimation(
-      fullPath,
-      lineColor,
-      pointColor
-    ));
-  });
-
-  // Load all animations
-  for (let animation of skeletonAnimations) {
-    animation.load();
-  }
+    // use fetch API read foler content
+    fetch(skeletonDataDir)
+      .then(response => {
+        if (!response.ok) {
+          throw new Error('Failed to access directory');
+        }
+        return response.text();
+      })
+      .then(html => {
+        // parse HTML to get file list
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        const links = doc.querySelectorAll('a');
+        const files = Array.from(links)
+          .map(link => link.href.split('/').pop())
+          .filter(file => file.endsWith('.json'));
+        
+        console.log('Found JSON files:', files);
+        
+        // Process each JSON file
+        files.forEach((file, index) => {
+          // Determine category based on filename
+          let category = 0;
+          if (file.startsWith('pose-recording-0')) {
+            category = 1;
+          } else if (file.startsWith('pose-recording-1')) {
+            category = 2;
+          } else if (file.startsWith('pose-recording-2')) {
+            category = 3;
+          } else if (file.startsWith('pose-recording-3')) {
+            category = 4;
+          } else if (file.startsWith('pose-recording-4')) {
+            category = 5;
+          }
+          
+          // Use different colors for different animations
+          let hue = (index * 60) % 360; // 60 degrees per color
+          let lineColor = color(hue, 80, 190, 255);
+          let pointColor = color((hue + 120) % 360, 180, 90, 255);
+          
+          // Create the full path
+          const fullPath = `${skeletonDataDir}/${file}`;
+          console.log(`Loading animation ${index + 1}: ${fullPath} (Category: ${category})`);
+  
+          skeletonAnimations.push(new SkeletonAnimation(
+            fullPath,
+            lineColor,
+            pointColor,
+            category
+          ));
+        });
+  
+        // Load all animations
+        for (let animation of skeletonAnimations) {
+          animation.load();
+        }
+      })
+      .catch(error => {
+        console.error('Error accessing directory:', error);
+      });
 }
 
 function setup() {
-  createCanvas(640, 480);
+  createCanvas(windowWidth, windowHeight);
   background(0);
   colorMode(HSB, 360, 100, 100, 255);
 }
