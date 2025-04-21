@@ -23,6 +23,11 @@ const RECORDING_DURATION = 5000; // 錄製5秒
 let isReplaying = false;
 let replayStartTime = 0;
 
+// 新增 Y-pose 偵測相關變數
+let yPoseStartTime = 0;
+let isHoldingYPose = false;
+const YPOSE_HOLD_DURATION = 2000; // 需要保持 Y-pose 2秒
+
 // 新增字體變數
 let myFont;
 let myFontBold;
@@ -52,18 +57,13 @@ const emotions = [
 // 新增當前情緒變數
 let currentEmotion;
 
-// 新增 T-pose 檢測相關變數
-let isWaitingForTPose = false;
-let tPoseDetected = false;
-let tPoseStartTime = 0;
-const TPOSE_HOLD_DURATION = 2000; // 需要保持 T-pose 2秒
-
 function preload() {
   // Load the bodyPose model
   bodyPoseDetector = ml5.bodyPose('BlazePose', { flipped: true });
+  
   // fonts
-  myFont = loadFont('/assets/font/Favorit-Inter.otf');
-  myFontBold = loadFont('/assets/font/Favorit-Bold.otf');
+  myFont = loadFont('assets/font/Favorit-Inter.otf');
+  myFontBold = loadFont('assets/font/Favorit-Bold.otf');
 }
 
 function setup() {
@@ -89,59 +89,62 @@ function setup() {
     });
     
     videoStream.hide();
+
+    // 創建 start 按鈕
+    startButton = createButton('START RECORDING');
+    startButton.position(width/2 - 100, height - 100);
+    startButton.size(200, 50);
+    startButton.style('font-size', '20px');
+    startButton.style('background-color', '#ffffff');
+    startButton.style('border', 'none');
+    startButton.style('border-radius', '25px');
+    startButton.style('cursor', 'pointer');
+    startButton.style('z-index', '1');
+    startButton.style('position', 'fixed');
+    startButton.mousePressed(startRecording);
+
+    // 創建 reset 按鈕（一開始隱藏）
+    resetButton = createButton('RESET');
+    resetButton.position(width/2 - 50, height - 60);
+    resetButton.size(100, 40);
+    resetButton.style('font-size', '16px');
+    resetButton.style('background-color', '#ffffff');
+    resetButton.style('border', 'none');
+    resetButton.style('border-radius', '20px');
+    resetButton.style('cursor', 'pointer');
+    resetButton.style('z-index', '1');
+    resetButton.style('position', 'fixed');
+    resetButton.mousePressed(resetAll);
+    resetButton.hide();
+
+    // 創建 download 按鈕（一開始隱藏）
+    downloadButton = createButton('DOWNLOAD');
+    downloadButton.position(width/2 + 60, height - 60);
+    downloadButton.size(150, 40);
+    downloadButton.style('font-size', '16px');
+    downloadButton.style('background-color', '#ffffff');
+    downloadButton.style('border', 'none');
+    downloadButton.style('border-radius', '20px');
+    downloadButton.style('cursor', 'pointer');
+    downloadButton.style('z-index', '1');
+    downloadButton.style('position', 'fixed');
+    downloadButton.mousePressed(downloadRecording);
+    downloadButton.hide();
+
+    connections = bodyPoseDetector.getConnections();
     
-    // 添加攝影機就緒事件監聽
-    videoStream.on('loadedmetadata', function() {
-      console.log('Camera is ready');
-    });
-    
-    // 添加攝影機錯誤事件監聽
-    videoStream.on('error', function(err) {
-      console.error('Camera error:', err);
-      // 顯示錯誤訊息
-      textAlign(CENTER, CENTER);
-      textSize(24);
-      fill(255);
-      text('Camera error. Please check your camera settings.', width/2, height/2);
-    });
-    
+    // 設定開始時間
+    startTime = millis();
   } catch (error) {
-    console.error('Failed to create video capture:', error);
-    // 顯示錯誤訊息
-    textAlign(CENTER, CENTER);
-    textSize(24);
-    fill(255);
-    text('Failed to access camera. Please check your browser settings.', width/2, height/2);
+    console.error('Error accessing camera:', error);
   }
 
-  // 創建 reset 按鈕（一開始隱藏）
-  resetButton = createButton('RESET');
-  resetButton.position(width/2 - 50, height - 60);
-  resetButton.size(100, 40);
-  resetButton.style('font-size', '16px');
-  resetButton.style('background-color', '#ffffff');
-  resetButton.style('border', 'none');
-  resetButton.style('border-radius', '20px');
-  resetButton.style('cursor', 'pointer');
-  resetButton.mousePressed(resetAll);
-  resetButton.hide();
-
-  // 創建 download 按鈕（一開始隱藏）
-  downloadButton = createButton('DOWNLOAD');
-  downloadButton.position(width/2 + 60, height - 60);
-  downloadButton.size(150, 40);
-  downloadButton.style('font-size', '16px');
-  downloadButton.style('background-color', '#ffffff');
-  downloadButton.style('border', 'none');
-  downloadButton.style('border-radius', '20px');
-  downloadButton.style('cursor', 'pointer');
-  downloadButton.mousePressed(downloadRecording);
-  downloadButton.hide();
-
-  connections = bodyPoseDetector.getConnections();
-  
-  // 設定開始時間
-  startTime = millis();
+  // 當提示結束時開始檢測骨架
+  setTimeout(() => {
+    showingPrompt = false;
+    waitingToStart = true;
+    startPoseDetection();
+  }, PROMPT_DURATION);
 }
 
 function draw() {
@@ -173,7 +176,6 @@ function draw() {
     if (millis() - startTime > PROMPT_DURATION) {
       showingPrompt = false;
       waitingToStart = true;
-      isWaitingForTPose = true; // 開始等待 T-pose
       startTime = millis();
     }
     return;
@@ -187,50 +189,45 @@ function draw() {
     scale(-1, 1);
     image(videoStream, 0, 0, width, height);
     pop();
-
-    // 顯示 T-pose 提示
+    
+    // 顯示骨架
+    if (poses.length > 0) {
+      // 繪製骨架連接線
+      for (let connection of connections) {
+        let pointA = poses[0].keypoints[connection[0]];
+        let pointB = poses[0].keypoints[connection[1]];
+        if (pointA.confidence > 0.1 && pointB.confidence > 0.1) {
+          stroke(255, 255, 0); // 黃色線條
+          strokeWeight(3);
+          line(pointA.x, pointA.y, pointB.x, pointB.y);
+        }
+      }
+      
+      // 繪製關鍵點
+      for (let keypoint of poses[0].keypoints) {
+        if (keypoint.confidence > 0.1) {
+          fill(255, 0, 0); // 紅色點
+          noStroke();
+          circle(keypoint.x, keypoint.y, 8);
+        }
+      }
+    }
+    
+    // 顯示提示文字
     textAlign(CENTER, CENTER);
     fill(255);
     textFont(myFont);
     textSize(32);
-    text('Please stand in a T-pose to start recording', width/2, height - 100);
-
-    // 檢查 T-pose
-    if (poses.length > 0) {
-      if (isTPose(poses[0])) {
-        if (!tPoseDetected) {
-          tPoseDetected = true;
-          tPoseStartTime = millis();
-        }
-        
-        // 顯示 T-pose 已檢測到的訊息
-        textFont(myFontBold);
-        textSize(48);
-        fill(0, 255, 0); // 綠色文字
-        text('T-pose detected!', width/2, height - 150);
-        
-        // 顯示保持時間
-        let holdTime = millis() - tPoseStartTime;
-        let holdProgress = min(holdTime / TPOSE_HOLD_DURATION, 1);
-        textSize(24);
-        text(`Hold for ${ceil((TPOSE_HOLD_DURATION - holdTime) / 1000)} seconds`, width/2, height - 200);
-        
-        // 繪製進度條
-        noFill();
-        stroke(255);
-        strokeWeight(2);
-        rect(width/2 - 100, height - 180, 200, 10);
-        fill(0, 255, 0);
-        noStroke();
-        rect(width/2 - 100, height - 180, 200 * holdProgress, 10);
-        
-        if (millis() - tPoseStartTime > TPOSE_HOLD_DURATION) {
-          startRecording();
-        }
-      } else {
-        tPoseDetected = false;
-      }
+    
+    if (isHoldingYPose) {
+      // 顯示保持 Y-pose 的進度
+      let progress = (millis() - yPoseStartTime) / YPOSE_HOLD_DURATION;
+      let progressText = `Hold Y-pose: ${ceil(progress * 100)}%`;
+      text(progressText, width/2, height - 200);
+    } else {
+      text('Make a Y-pose to start recording', width/2, height - 200);
     }
+    
     return;
   }
 
@@ -382,77 +379,111 @@ function drawPoseSet(poseSet, lineColor, pointColor1, pointColor2, pointColor3, 
   } 
 }
 
+// 計算三點之間的角度
+function calculateAngle(a, b, c) {
+  let ab = dist(a.x, a.y, b.x, b.y);
+  let bc = dist(b.x, b.y, c.x, c.y);
+  let ac = dist(a.x, a.y, c.x, c.y);
+  
+  // 使用餘弦定理計算角度
+  let angle = acos((ab * ab + bc * bc - ac * ac) / (2 * ab * bc));
+  return angle * (180 / PI); // 轉換為角度
+}
+
+// 檢查是否為 Y-pose
+function isYPose(pose) {
+  if (!pose || !pose.keypoints) return false;
+  
+  // 獲取需要的關鍵點
+  let leftShoulder = pose.keypoints[5];  // 左肩
+  let rightShoulder = pose.keypoints[6]; // 右肩
+  let leftElbow = pose.keypoints[7];     // 左肘
+  let rightElbow = pose.keypoints[8];    // 右肘
+  let leftHip = pose.keypoints[11];      // 左臀
+  let rightHip = pose.keypoints[12];     // 右臀
+  
+  // 檢查關鍵點是否存在且置信度足夠
+  if (!leftShoulder || !rightShoulder || !leftElbow || !rightElbow || 
+      !leftHip || !rightHip) return false;
+  
+  if (leftShoulder.confidence < 0.5 || rightShoulder.confidence < 0.5 ||
+      leftElbow.confidence < 0.5 || rightElbow.confidence < 0.5 ||
+      leftHip.confidence < 0.5 || rightHip.confidence < 0.5) return false;
+  
+  // 計算肩膀和臀部的中心點
+  let shoulderCenter = {
+    x: (leftShoulder.x + rightShoulder.x) / 2,
+    y: (leftShoulder.y + rightShoulder.y) / 2
+  };
+  
+  let hipCenter = {
+    x: (leftHip.x + rightHip.x) / 2,
+    y: (leftHip.y + rightHip.y) / 2
+  };
+  
+  // 計算身體中心線向量
+  let bodyCenterVector = {
+    x: hipCenter.x - shoulderCenter.x,
+    y: hipCenter.y - shoulderCenter.y
+  };
+  
+  // 計算左臂向量
+  let leftArmVector = {
+    x: leftElbow.x - leftShoulder.x,
+    y: leftElbow.y - leftShoulder.y
+  };
+  
+  // 計算右臂向量
+  let rightArmVector = {
+    x: rightElbow.x - rightShoulder.x,
+    y: rightElbow.y - rightShoulder.y
+  };
+  
+  // 計算左臂與身體中心線的夾角
+  let leftArmAngle = calculateAngle(
+    {x: leftShoulder.x + bodyCenterVector.x, y: leftShoulder.y + bodyCenterVector.y},
+    leftShoulder,
+    leftElbow
+  );
+  
+  // 計算右臂與身體中心線的夾角
+  let rightArmAngle = calculateAngle(
+    {x: rightShoulder.x + bodyCenterVector.x, y: rightShoulder.y + bodyCenterVector.y},
+    rightShoulder,
+    rightElbow
+  );
+  
+  // 如果兩臂角度都大於90度，則認為是Y-pose
+  return leftArmAngle > 90 && rightArmAngle > 90;
+}
+
 // Callback function for when bodyPose outputs data
 function gotPoses(results) {
-  // Save the output to the poses variable
   poses = results;
-}
-
-// 新增 T-pose 檢測函數
-function isTPose(pose) {
-  if (!pose || !pose.keypoints) return false;
-
-  // 獲取關鍵點
-  const leftShoulder = pose.keypoints[11];
-  const rightShoulder = pose.keypoints[12];
-  const leftElbow = pose.keypoints[13];
-  const rightElbow = pose.keypoints[14];
-  const leftWrist = pose.keypoints[15];
-  const rightWrist = pose.keypoints[16];
-  const leftHip = pose.keypoints[23];
-  const rightHip = pose.keypoints[24];
-
-  // 檢查關鍵點的可信度
-  if (!leftShoulder || !rightShoulder || !leftElbow || !rightElbow || 
-      !leftWrist || !rightWrist || !leftHip || !rightHip) {
-    return false;
+  if (poses.length > 0) {
+    // 檢查是否為 Y-pose
+    if (isYPose(poses[0])) {
+      if (!isHoldingYPose) {
+        // 開始計時
+        isHoldingYPose = true;
+        yPoseStartTime = millis();
+        console.log("Y pose detected!");
+      } else if (millis() - yPoseStartTime > YPOSE_HOLD_DURATION) {
+        // 如果保持 Y-pose 超過 2 秒，開始錄製
+        startRecording();
+      }
+    } else {
+      // 如果不是 Y-pose，重置計時
+      isHoldingYPose = false;
+    }
   }
-
-  // 檢查可信度閾值
-  const confidenceThreshold = 0.5;
-  if (leftShoulder.confidence < confidenceThreshold || 
-      rightShoulder.confidence < confidenceThreshold ||
-      leftElbow.confidence < confidenceThreshold ||
-      rightElbow.confidence < confidenceThreshold ||
-      leftWrist.confidence < confidenceThreshold ||
-      rightWrist.confidence < confidenceThreshold ||
-      leftHip.confidence < confidenceThreshold ||
-      rightHip.confidence < confidenceThreshold) {
-    return false;
-  }
-
-  // 計算角度
-  const leftArmAngle = calculateAngle(leftShoulder, leftElbow, leftWrist);
-  const rightArmAngle = calculateAngle(rightShoulder, rightElbow, rightWrist);
-  const shoulderAngle = calculateAngle(leftShoulder, rightShoulder, rightHip);
-
-  // T-pose 條件：
-  // 1. 手臂與身體成90度（允許±15度的誤差）
-  // 2. 肩膀與髖部平行
-  const angleThreshold = 15;
-  return Math.abs(leftArmAngle - 90) < angleThreshold &&
-         Math.abs(rightArmAngle - 90) < angleThreshold &&
-         Math.abs(shoulderAngle - 180) < angleThreshold;
-}
-
-// 新增角度計算函數
-function calculateAngle(a, b, c) {
-  const ab = { x: b.x - a.x, y: b.y - a.y };
-  const cb = { x: b.x - c.x, y: b.y - c.y };
-  
-  const dot = (ab.x * cb.x + ab.y * cb.y);
-  const cross = (ab.x * cb.y - ab.y * cb.x);
-  
-  const angle = Math.atan2(cross, dot) * (180 / Math.PI);
-  return Math.abs(angle);
 }
 
 // 修改開始錄製的函數
 function startRecording() {
   waitingToStart = false;
-  isWaitingForTPose = false;
-  tPoseDetected = false;
   isCountingDown = true;
+  isHoldingYPose = false; // 重置 Y-pose 狀態
   startTime = millis();
   // 每次開始錄製時產生新的隨機色相
   currentHue = random(360);
@@ -515,6 +546,7 @@ function resetAll() {
   isCountingDown = false;
   isDetecting = false;
   isReplaying = false;
+  isHoldingYPose = false; // 重置 Y-pose 狀態
   poses = [];
   recordedPoses = [];
   startTime = millis();
@@ -524,5 +556,14 @@ function resetAll() {
   
   resetButton.hide();
   downloadButton.hide();
+  
+  // 停止骨架偵測
+  bodyPoseDetector.detectStop();
 }
 
+// 新增函數：當提示結束時開始檢測骨架
+function startPoseDetection() {
+  if (waitingToStart) {
+    bodyPoseDetector.detectStart(videoStream, gotPoses);
+  }
+}
