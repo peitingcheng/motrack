@@ -26,6 +26,7 @@ let replayStartTime = 0;
 // 新增 Y-pose 偵測相關變數
 let yPoseStartTime = 0;
 let isHoldingYPose = false;
+let isYPoseLocked = false; // 新增鎖定變數
 const YPOSE_HOLD_DURATION = 2000; // 需要保持 Y-pose 2秒
 
 // 新增字體變數
@@ -203,12 +204,19 @@ function draw() {
         }
       }
       
-      // 繪製關鍵點
+      // 繪製關鍵點和標籤
       for (let keypoint of poses[0].keypoints) {
         if (keypoint.confidence > 0.1) {
+          // 繪製點
           fill(255, 0, 0); // 紅色點
           noStroke();
           circle(keypoint.x, keypoint.y, 8);
+          
+          // 添加英文標籤
+          fill(255);
+          textSize(50);
+          textAlign(LEFT, CENTER);
+          text(keypoint.name, keypoint.x + 10, keypoint.y);
         }
       }
     }
@@ -379,82 +387,85 @@ function drawPoseSet(poseSet, lineColor, pointColor1, pointColor2, pointColor3, 
   } 
 }
 
-// 計算三點之間的角度
-function calculateAngle(a, b, c) {
-  let ab = dist(a.x, a.y, b.x, b.y);
-  let bc = dist(b.x, b.y, c.x, c.y);
-  let ac = dist(a.x, a.y, c.x, c.y);
-  
-  // 使用餘弦定理計算角度
-  let angle = acos((ab * ab + bc * bc - ac * ac) / (2 * ab * bc));
-  return angle * (180 / PI); // 轉換為角度
-}
-
 // 檢查是否為 Y-pose
 function isYPose(pose) {
-  if (!pose || !pose.keypoints) return false;
+  if (!pose || !pose.keypoints) {
+    console.log("錯誤：無法獲取姿勢數據");
+    return false;
+  }
+  
+  if (isYPoseLocked) {
+    console.log("Y-pose 檢測已被鎖定");
+    return false;
+  }
+
+  // 輸出所有關鍵點信息
+  console.log("所有關鍵點信息：");
+  pose.keypoints.forEach((keypoint, index) => {
+    console.log(`索引 ${index}: ${keypoint.name} - 位置: (${keypoint.x.toFixed(1)}, ${keypoint.y.toFixed(1)}) - 置信度: ${keypoint.confidence.toFixed(2)}`);
+  });
   
   // 獲取需要的關鍵點
   let leftShoulder = pose.keypoints[5];  // 左肩
   let rightShoulder = pose.keypoints[6]; // 右肩
   let leftElbow = pose.keypoints[7];     // 左肘
   let rightElbow = pose.keypoints[8];    // 右肘
-  let leftHip = pose.keypoints[11];      // 左臀
-  let rightHip = pose.keypoints[12];     // 右臀
   
-  // 檢查關鍵點是否存在且置信度足夠
-  if (!leftShoulder || !rightShoulder || !leftElbow || !rightElbow || 
-      !leftHip || !rightHip) return false;
+  // 檢查關鍵點是否存在
+  if (!leftShoulder || !rightShoulder || !leftElbow || !rightElbow) {
+    console.log("錯誤：缺少必要的關鍵點");
+    return false;
+  }
+  
+  // 檢查置信度
+  if (leftShoulder.confidence < 0.5) console.log("左肩置信度不足");
+  if (rightShoulder.confidence < 0.5) console.log("右肩置信度不足");
+  if (leftElbow.confidence < 0.5) console.log("左肘置信度不足");
+  if (rightElbow.confidence < 0.5) console.log("右肘置信度不足");
   
   if (leftShoulder.confidence < 0.5 || rightShoulder.confidence < 0.5 ||
-      leftElbow.confidence < 0.5 || rightElbow.confidence < 0.5 ||
-      leftHip.confidence < 0.5 || rightHip.confidence < 0.5) return false;
+      leftElbow.confidence < 0.5 || rightElbow.confidence < 0.5) {
+    return false;
+  }
+
+  // 輸出關鍵點位置信息
+  console.log("\n關鍵點位置：");
+  console.log("左肩位置:", leftShoulder.x.toFixed(1), leftShoulder.y.toFixed(1));
+  console.log("右肩位置:", rightShoulder.x.toFixed(1), rightShoulder.y.toFixed(1));
+  console.log("左肘位置:", leftElbow.x.toFixed(1), leftElbow.y.toFixed(1));
+  console.log("右肘位置:", rightElbow.x.toFixed(1), rightElbow.y.toFixed(1));
   
-  // 計算肩膀和臀部的中心點
-  let shoulderCenter = {
-    x: (leftShoulder.x + rightShoulder.x) / 2,
-    y: (leftShoulder.y + rightShoulder.y) / 2
-  };
+  // 檢查手肘是否高於肩膀（y軸向上為正）
+  let leftElbowAboveShoulder = leftElbow.y > leftShoulder.y;
+  let rightElbowAboveShoulder = rightElbow.y > rightShoulder.y;
   
-  let hipCenter = {
-    x: (leftHip.x + rightHip.x) / 2,
-    y: (leftHip.y + rightHip.y) / 2
-  };
+  // 計算手肘與肩膀的垂直距離
+  let leftElbowHeight = leftElbow.y - leftShoulder.y;
+  let rightElbowHeight = rightElbow.y - rightShoulder.y;
   
-  // 計算身體中心線向量
-  let bodyCenterVector = {
-    x: hipCenter.x - shoulderCenter.x,
-    y: hipCenter.y - shoulderCenter.y
-  };
+  // 輸出詳細信息
+  console.log("\n姿勢分析：");
+  console.log(`左肩 y 值: ${leftShoulder.y.toFixed(1)}`);
+  console.log(`左肘 y 值: ${leftElbow.y.toFixed(1)}`);
+  console.log(`右肩 y 值: ${rightShoulder.y.toFixed(1)}`);
+  console.log(`右肘 y 值: ${rightElbow.y.toFixed(1)}`);
+  console.log(`左肘高於肩膀: ${leftElbowAboveShoulder} (高度差: ${leftElbowHeight.toFixed(1)}px)`);
+  console.log(`右肘高於肩膀: ${rightElbowAboveShoulder} (高度差: ${rightElbowHeight.toFixed(1)}px)`);
   
-  // 計算左臂向量
-  let leftArmVector = {
-    x: leftElbow.x - leftShoulder.x,
-    y: leftElbow.y - leftShoulder.y
-  };
+  // 檢查所有條件
+  if (!leftElbowAboveShoulder) console.log("左肘未高於肩膀");
+  if (!rightElbowAboveShoulder) console.log("右肘未高於肩膀");
   
-  // 計算右臂向量
-  let rightArmVector = {
-    x: rightElbow.x - rightShoulder.x,
-    y: rightElbow.y - rightShoulder.y
-  };
+  // 如果兩肘都高於肩膀，則認為是Y-pose
+  let isYPose = leftElbowAboveShoulder && rightElbowAboveShoulder;
+                
+  if (isYPose) {
+    console.log("\n檢測到 Y-pose！");
+  } else {
+    console.log("\n未檢測到 Y-pose");
+  }
   
-  // 計算左臂與身體中心線的夾角
-  let leftArmAngle = calculateAngle(
-    {x: leftShoulder.x + bodyCenterVector.x, y: leftShoulder.y + bodyCenterVector.y},
-    leftShoulder,
-    leftElbow
-  );
-  
-  // 計算右臂與身體中心線的夾角
-  let rightArmAngle = calculateAngle(
-    {x: rightShoulder.x + bodyCenterVector.x, y: rightShoulder.y + bodyCenterVector.y},
-    rightShoulder,
-    rightElbow
-  );
-  
-  // 如果兩臂角度都大於90度，則認為是Y-pose
-  return leftArmAngle > 90 && rightArmAngle > 90;
+  return isYPose;
 }
 
 // Callback function for when bodyPose outputs data
@@ -471,6 +482,7 @@ function gotPoses(results) {
       } else if (millis() - yPoseStartTime > YPOSE_HOLD_DURATION) {
         // 如果保持 Y-pose 超過 2 秒，開始錄製
         startRecording();
+        isYPoseLocked = true; // 鎖定 Y-pose 檢測
       }
     } else {
       // 如果不是 Y-pose，重置計時
@@ -547,6 +559,7 @@ function resetAll() {
   isDetecting = false;
   isReplaying = false;
   isHoldingYPose = false; // 重置 Y-pose 狀態
+  isYPoseLocked = false; // 解鎖 Y-pose 檢測
   poses = [];
   recordedPoses = [];
   startTime = millis();
