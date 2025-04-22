@@ -390,38 +390,38 @@ function drawPoseSet(poseSet, lineColor, pointColor1, pointColor2, pointColor3, 
 // 檢查是否為 Y-pose
 function isYPose(pose) {
   if (!pose || !pose.keypoints) {
-    console.log("錯誤：無法獲取姿勢數據");
+    console.log("error: cannot get pose data");
     return false;
   }
   
   if (isYPoseLocked) {
-    console.log("Y-pose 檢測已被鎖定");
+    console.log("Y-pose detection is locked");
     return false;
   }
 
   // 輸出所有關鍵點信息
-  console.log("所有關鍵點信息：");
+  console.log("all keypoint information:");
   pose.keypoints.forEach((keypoint, index) => {
-    console.log(`索引 ${index}: ${keypoint.name} - 位置: (${keypoint.x.toFixed(1)}, ${keypoint.y.toFixed(1)}) - 置信度: ${keypoint.confidence.toFixed(2)}`);
+    console.log(`index ${index}: ${keypoint.name} - position: (${keypoint.x.toFixed(1)}, ${keypoint.y.toFixed(1)}) - confidence: ${keypoint.confidence.toFixed(2)}`);
   });
   
   // 獲取需要的關鍵點
-  let leftShoulder = pose.keypoints[5];  // 左肩
-  let rightShoulder = pose.keypoints[6]; // 右肩
-  let leftElbow = pose.keypoints[7];     // 左肘
-  let rightElbow = pose.keypoints[8];    // 右肘
+  let leftShoulder = pose.keypoints[11];  // 左肩
+  let rightShoulder = pose.keypoints[12]; // 右肩
+  let leftElbow = pose.keypoints[13];     // 左肘
+  let rightElbow = pose.keypoints[14];    // 右肘
   
   // 檢查關鍵點是否存在
   if (!leftShoulder || !rightShoulder || !leftElbow || !rightElbow) {
-    console.log("錯誤：缺少必要的關鍵點");
+    console.log("error: missing necessary keypoints");
     return false;
   }
   
   // 檢查置信度
-  if (leftShoulder.confidence < 0.5) console.log("左肩置信度不足");
-  if (rightShoulder.confidence < 0.5) console.log("右肩置信度不足");
-  if (leftElbow.confidence < 0.5) console.log("左肘置信度不足");
-  if (rightElbow.confidence < 0.5) console.log("右肘置信度不足");
+  if (leftShoulder.confidence < 0.5) console.log("left shoulder confidence is not enough");
+  if (rightShoulder.confidence < 0.5) console.log("right shoulder confidence is not enough");
+  if (leftElbow.confidence < 0.5) console.log("left elbow confidence is not enough");
+  if (rightElbow.confidence < 0.5) console.log("right elbow confidence is not enough");
   
   if (leftShoulder.confidence < 0.5 || rightShoulder.confidence < 0.5 ||
       leftElbow.confidence < 0.5 || rightElbow.confidence < 0.5) {
@@ -429,40 +429,40 @@ function isYPose(pose) {
   }
 
   // 輸出關鍵點位置信息
-  console.log("\n關鍵點位置：");
-  console.log("左肩位置:", leftShoulder.x.toFixed(1), leftShoulder.y.toFixed(1));
-  console.log("右肩位置:", rightShoulder.x.toFixed(1), rightShoulder.y.toFixed(1));
-  console.log("左肘位置:", leftElbow.x.toFixed(1), leftElbow.y.toFixed(1));
-  console.log("右肘位置:", rightElbow.x.toFixed(1), rightElbow.y.toFixed(1));
+  console.log("\nkeypoint positions:");
+  console.log("left shoulder position:", leftShoulder.x.toFixed(1), leftShoulder.y.toFixed(1));
+  console.log("right shoulder position:", rightShoulder.x.toFixed(1), rightShoulder.y.toFixed(1));
+  console.log("left elbow position:", leftElbow.x.toFixed(1), leftElbow.y.toFixed(1));
+  console.log("right elbow position:", rightElbow.x.toFixed(1), rightElbow.y.toFixed(1));
   
   // 檢查手肘是否高於肩膀（y軸向上為正）
-  let leftElbowAboveShoulder = leftElbow.y > leftShoulder.y;
-  let rightElbowAboveShoulder = rightElbow.y > rightShoulder.y;
+  let leftElbowAboveShoulder = leftElbow.y < leftShoulder.y;
+  let rightElbowAboveShoulder = rightElbow.y < rightShoulder.y;
   
   // 計算手肘與肩膀的垂直距離
   let leftElbowHeight = leftElbow.y - leftShoulder.y;
   let rightElbowHeight = rightElbow.y - rightShoulder.y;
   
   // 輸出詳細信息
-  console.log("\n姿勢分析：");
-  console.log(`左肩 y 值: ${leftShoulder.y.toFixed(1)}`);
-  console.log(`左肘 y 值: ${leftElbow.y.toFixed(1)}`);
-  console.log(`右肩 y 值: ${rightShoulder.y.toFixed(1)}`);
-  console.log(`右肘 y 值: ${rightElbow.y.toFixed(1)}`);
-  console.log(`左肘高於肩膀: ${leftElbowAboveShoulder} (高度差: ${leftElbowHeight.toFixed(1)}px)`);
-  console.log(`右肘高於肩膀: ${rightElbowAboveShoulder} (高度差: ${rightElbowHeight.toFixed(1)}px)`);
+  console.log("\npose analysis:");
+  console.log(`left shoulder y value: ${leftShoulder.y.toFixed(1)}`);
+  console.log(`left elbow y value: ${leftElbow.y.toFixed(1)}`);
+  console.log(`right shoulder y value: ${rightShoulder.y.toFixed(1)}`);
+  console.log(`right elbow y value: ${rightElbow.y.toFixed(1)}`);
+  console.log(`left elbow above shoulder: ${leftElbowAboveShoulder} (height difference: ${leftElbowHeight.toFixed(1)}px)`);
+  console.log(`right elbow above shoulder: ${rightElbowAboveShoulder} (height difference: ${rightElbowHeight.toFixed(1)}px)`);
   
   // 檢查所有條件
-  if (!leftElbowAboveShoulder) console.log("左肘未高於肩膀");
-  if (!rightElbowAboveShoulder) console.log("右肘未高於肩膀");
+  if (!leftElbowAboveShoulder) console.log("left elbow is not above shoulder");
+  if (!rightElbowAboveShoulder) console.log("right elbow is not above shoulder");
   
   // 如果兩肘都高於肩膀，則認為是Y-pose
   let isYPose = leftElbowAboveShoulder && rightElbowAboveShoulder;
                 
   if (isYPose) {
-    console.log("\n檢測到 Y-pose！");
+    console.log("\nY-pose detected!");
   } else {
-    console.log("\n未檢測到 Y-pose");
+    console.log("\nY-pose not detected");
   }
   
   return isYPose;
