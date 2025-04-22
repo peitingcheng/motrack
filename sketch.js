@@ -27,7 +27,7 @@ let replayStartTime = 0;
 let yPoseStartTime = 0;
 let isHoldingYPose = false;
 let isYPoseLocked = false; // 新增鎖定變數
-const YPOSE_HOLD_DURATION = 2000; // 需要保持 Y-pose 2秒
+const YPOSE_HOLD_DURATION = 3000; // 需要保持 Y-pose 3秒
 
 // 新增字體變數
 let myFont;
@@ -38,7 +38,6 @@ let resetButton;
 
 // 新增等待開始錄製的狀態
 let waitingToStart = false;
-let startButton;
 
 // 新增下載按鈕變數
 let downloadButton;
@@ -90,19 +89,6 @@ function setup() {
     });
     
     videoStream.hide();
-
-    // 創建 start 按鈕
-    startButton = createButton('START RECORDING');
-    startButton.position(width/2 - 100, height - 100);
-    startButton.size(200, 50);
-    startButton.style('font-size', '20px');
-    startButton.style('background-color', '#ffffff');
-    startButton.style('border', 'none');
-    startButton.style('border-radius', '25px');
-    startButton.style('cursor', 'pointer');
-    startButton.style('z-index', '1');
-    startButton.style('position', 'fixed');
-    startButton.mousePressed(startRecording);
 
     // 創建 reset 按鈕（一開始隱藏）
     resetButton = createButton('RESET');
