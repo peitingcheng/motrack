@@ -15,7 +15,8 @@ const RECORD_INTERVAL = 333;
 
 // 新增計時相關變數
 let startTime = 0;
-let showingPrompt = true;
+let showingTitle = true; // 新增標題畫面狀態
+let showingPrompt = false;
 let isCountingDown = false;
 const PROMPT_DURATION = 5000; // 提示文字顯示5秒
 const COUNTDOWN_DURATION = 3000; // 倒數3秒
@@ -126,16 +127,39 @@ function setup() {
     console.error('Error accessing camera:', error);
   }
 
-  // 當提示結束時開始檢測骨架
-  setTimeout(() => {
-    showingPrompt = false;
-    waitingToStart = true;
-    startPoseDetection();
-  }, PROMPT_DURATION);
+  // 開始檢測骨架
+  bodyPoseDetector.detectStart(videoStream, gotPoses);
 }
 
 function draw() {
   background(0);
+  
+  // 顯示標題畫面階段
+  if (showingTitle) {
+    textAlign(CENTER, CENTER);
+    fill(255);
+    
+    // 計算文字位置
+    let y = height/2;
+    
+    // 標題文字
+    textFont(myFontBold);
+    textSize(64);
+    text('TRACING THE UNSPOKEN', width/2, y);
+    
+    // 副標題
+    textFont(myFont);
+    textSize(24);
+    text('Please stand in front of the camera', width/2, y + 100);
+    
+    // 如果偵測到完整骨架，進入 showingPrompt 階段
+    if (poses.length > 0 && isFullBodyDetected(poses[0])) {
+      showingTitle = false;
+      showingPrompt = true;
+      startTime = millis();
+    }
+    return;
+  }
   
   // 顯示提示文字階段
   if (showingPrompt) {
@@ -147,18 +171,18 @@ function draw() {
     
     // "How do you express" 使用 Inter
     textFont(myFont);
-    textSize(32);
-    text('How do you express', width/2, y - 40);
+    textSize(48);
+    text('How do you express', width/2, y - 60);
     
     // 當前選擇的情緒 使用 Medium
     textFont(myFontBold);
-    textSize(32);
+    textSize(48);
     text(`"${currentEmotion}"`, width/2, y);
     
     // "with your body?" 使用 Inter
     textFont(myFont);
-    textSize(32);
-    text('with your body?', width/2, y + 40);
+    textSize(48);
+    text('with your body?', width/2, y + 60);
     
     if (millis() - startTime > PROMPT_DURATION) {
       showingPrompt = false;
@@ -180,32 +204,32 @@ function draw() {
     // 顯示骨架
     if (poses.length > 0) {
       // 繪製骨架連接線
-      for (let connection of connections) {
-        let pointA = poses[0].keypoints[connection[0]];
-        let pointB = poses[0].keypoints[connection[1]];
-        if (pointA.confidence > 0.1 && pointB.confidence > 0.1) {
-          stroke(255, 255, 0); // 黃色線條
-          strokeWeight(3);
-          line(pointA.x, pointA.y, pointB.x, pointB.y);
-        }
-      }
+      // for (let connection of connections) {
+      //   let pointA = poses[0].keypoints[connection[0]];
+      //   let pointB = poses[0].keypoints[connection[1]];
+      //   if (pointA.confidence > 0.1 && pointB.confidence > 0.1) {
+      //     stroke(255, 0, 0); // 黃色線條
+      //     strokeWeight(3);
+      //     line(pointA.x, pointA.y, pointB.x, pointB.y);
+      //   }
+      // }
       
-      // 繪製關鍵點和標籤
-      for (let keypoint of poses[0].keypoints) {
-        if (keypoint.confidence > 0.1) {
-          // 繪製點
-          fill(255, 0, 0); // 紅色點
-          noStroke();
-          circle(keypoint.x, keypoint.y, 8);
+      // // 繪製關鍵點和標籤
+      // for (let keypoint of poses[0].keypoints) {
+      //   if (keypoint.confidence > 0.1) {
+      //     // 繪製點
+      //     fill(255, 0, 0); // 紅色點
+      //     noStroke();
+      //     circle(keypoint.x, keypoint.y, 8);
           
-          // 添加英文標籤
-          fill(255);
-          textSize(50);
-          textAlign(LEFT, CENTER);
-          text(keypoint.name, keypoint.x + 10, keypoint.y);
+          // // 添加英文標籤
+          // fill(255);
+          // textSize(50);
+          // textAlign(LEFT, CENTER);
+          // text(keypoint.name, keypoint.x + 10, keypoint.y);
         }
-      }
-    }
+      // }
+    // }
     
     // 顯示提示文字
     textAlign(CENTER, CENTER);
@@ -386,10 +410,10 @@ function isYPose(pose) {
   }
 
   // 輸出所有關鍵點信息
-  console.log("all keypoint information:");
-  pose.keypoints.forEach((keypoint, index) => {
-    console.log(`index ${index}: ${keypoint.name} - position: (${keypoint.x.toFixed(1)}, ${keypoint.y.toFixed(1)}) - confidence: ${keypoint.confidence.toFixed(2)}`);
-  });
+  // console.log("all keypoint information:");
+  // pose.keypoints.forEach((keypoint, index) => {
+  //   console.log(`index ${index}: ${keypoint.name} - position: (${keypoint.x.toFixed(1)}, ${keypoint.y.toFixed(1)}) - confidence: ${keypoint.confidence.toFixed(2)}`);
+  // });
   
   // 獲取需要的關鍵點
   let leftShoulder = pose.keypoints[11];  // 左肩
@@ -404,10 +428,10 @@ function isYPose(pose) {
   }
   
   // 檢查置信度
-  if (leftShoulder.confidence < 0.5) console.log("left shoulder confidence is not enough");
-  if (rightShoulder.confidence < 0.5) console.log("right shoulder confidence is not enough");
-  if (leftElbow.confidence < 0.5) console.log("left elbow confidence is not enough");
-  if (rightElbow.confidence < 0.5) console.log("right elbow confidence is not enough");
+  // if (leftShoulder.confidence < 0.5) console.log("left shoulder confidence is not enough");
+  // if (rightShoulder.confidence < 0.5) console.log("right shoulder confidence is not enough");
+  // if (leftElbow.confidence < 0.5) console.log("left elbow confidence is not enough");
+  // if (rightElbow.confidence < 0.5) console.log("right elbow confidence is not enough");
   
   if (leftShoulder.confidence < 0.5 || rightShoulder.confidence < 0.5 ||
       leftElbow.confidence < 0.5 || rightElbow.confidence < 0.5) {
@@ -415,11 +439,11 @@ function isYPose(pose) {
   }
 
   // 輸出關鍵點位置信息
-  console.log("\nkeypoint positions:");
-  console.log("left shoulder position:", leftShoulder.x.toFixed(1), leftShoulder.y.toFixed(1));
-  console.log("right shoulder position:", rightShoulder.x.toFixed(1), rightShoulder.y.toFixed(1));
-  console.log("left elbow position:", leftElbow.x.toFixed(1), leftElbow.y.toFixed(1));
-  console.log("right elbow position:", rightElbow.x.toFixed(1), rightElbow.y.toFixed(1));
+  // console.log("\nkeypoint positions:");
+  // console.log("left shoulder position:", leftShoulder.x.toFixed(1), leftShoulder.y.toFixed(1));
+  // console.log("right shoulder position:", rightShoulder.x.toFixed(1), rightShoulder.y.toFixed(1));
+  // console.log("left elbow position:", leftElbow.x.toFixed(1), leftElbow.y.toFixed(1));
+  // console.log("right elbow position:", rightElbow.x.toFixed(1), rightElbow.y.toFixed(1));
   
   // 檢查手肘是否高於肩膀（y軸向上為正）
   let leftElbowAboveShoulder = leftElbow.y < leftShoulder.y;
@@ -430,17 +454,17 @@ function isYPose(pose) {
   let rightElbowHeight = rightElbow.y - rightShoulder.y;
   
   // 輸出詳細信息
-  console.log("\npose analysis:");
-  console.log(`left shoulder y value: ${leftShoulder.y.toFixed(1)}`);
-  console.log(`left elbow y value: ${leftElbow.y.toFixed(1)}`);
-  console.log(`right shoulder y value: ${rightShoulder.y.toFixed(1)}`);
-  console.log(`right elbow y value: ${rightElbow.y.toFixed(1)}`);
-  console.log(`left elbow above shoulder: ${leftElbowAboveShoulder} (height difference: ${leftElbowHeight.toFixed(1)}px)`);
-  console.log(`right elbow above shoulder: ${rightElbowAboveShoulder} (height difference: ${rightElbowHeight.toFixed(1)}px)`);
+  // console.log("\npose analysis:");
+  // console.log(`left shoulder y value: ${leftShoulder.y.toFixed(1)}`);
+  // console.log(`left elbow y value: ${leftElbow.y.toFixed(1)}`);
+  // console.log(`right shoulder y value: ${rightShoulder.y.toFixed(1)}`);
+  // console.log(`right elbow y value: ${rightElbow.y.toFixed(1)}`);
+  // console.log(`left elbow above shoulder: ${leftElbowAboveShoulder} (height difference: ${leftElbowHeight.toFixed(1)}px)`);
+  // console.log(`right elbow above shoulder: ${rightElbowAboveShoulder} (height difference: ${rightElbowHeight.toFixed(1)}px)`);
   
-  // 檢查所有條件
-  if (!leftElbowAboveShoulder) console.log("left elbow is not above shoulder");
-  if (!rightElbowAboveShoulder) console.log("right elbow is not above shoulder");
+  // // 檢查所有條件
+  // if (!leftElbowAboveShoulder) console.log("left elbow is not above shoulder");
+  // if (!rightElbowAboveShoulder) console.log("right elbow is not above shoulder");
   
   // 如果兩肘都高於肩膀，則認為是Y-pose
   let isYPose = leftElbowAboveShoulder && rightElbowAboveShoulder;
@@ -454,9 +478,44 @@ function isYPose(pose) {
   return isYPose;
 }
 
+// 新增檢查全身骨架的函數
+function isFullBodyDetected(pose) {
+  if (!pose || !pose.keypoints) return false;
+  
+  // 定義需要檢查的關鍵點索引
+  const requiredKeypoints = [
+    0,  // nose
+    11, // left shoulder
+    12, // right shoulder
+    23, // left hip
+    24, // right hip
+    25, // left knee
+    26, // right knee
+    27, // left ankle
+    28  // right ankle
+  ];
+  
+  // 檢查所有必要關鍵點是否存在且置信度足夠高
+  for (let index of requiredKeypoints) {
+    const keypoint = pose.keypoints[index];
+    if (!keypoint || keypoint.confidence < 0.5) {
+      return false;
+    }
+  }
+  
+  return true;
+}
+
 // Callback function for when bodyPose outputs data
 function gotPoses(results) {
   poses = results;
+  
+  // 在標題畫面階段，只檢查是否偵測到完整骨架
+  if (showingTitle) {
+    return;
+  }
+  
+  // 其他階段的處理保持不變
   if (poses.length > 0) {
     // 檢查是否為 Y-pose
     if (isYPose(poses[0])) {
@@ -539,7 +598,8 @@ function downloadRecording() {
 
 // 修改重置函數
 function resetAll() {
-  showingPrompt = true;
+  showingTitle = true;
+  showingPrompt = false;
   waitingToStart = false;
   isCountingDown = false;
   isDetecting = false;
@@ -558,11 +618,4 @@ function resetAll() {
   
   // 停止骨架偵測
   bodyPoseDetector.detectStop();
-}
-
-// 新增函數：當提示結束時開始檢測骨架
-function startPoseDetection() {
-  if (waitingToStart) {
-    bodyPoseDetector.detectStart(videoStream, gotPoses);
-  }
 }
