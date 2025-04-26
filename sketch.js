@@ -15,7 +15,7 @@ const RECORD_INTERVAL = 333;
 
 // 新增計時相關變數
 let startTime = 0;
-let showingTitle = true; // 新增標題畫面狀態
+let showingTitle = true;
 let showingPrompt = false;
 let isCountingDown = false;
 const PROMPT_DURATION = 5000; // 提示文字顯示5秒
@@ -23,6 +23,10 @@ const COUNTDOWN_DURATION = 3000; // 倒數3秒
 const RECORDING_DURATION = 5000; // 錄製5秒
 let isReplaying = false;
 let replayStartTime = 0;
+
+// 新增動態文字變數
+let titleText;
+let subtitleText;
 
 // 新增 Y-pose 偵測相關變數
 let yPoseStartTime = 0;
@@ -33,6 +37,7 @@ const YPOSE_HOLD_DURATION = 3000; // 需要保持 Y-pose 3秒
 // 新增字體變數
 let myFont;
 let myFontBold;
+let pilowlavaFont;
 
 // 新增 reset 按鈕變數
 let resetButton;
@@ -58,6 +63,9 @@ const emotions = [
 // 新增當前情緒變數
 let currentEmotion;
 
+// 新增背景動畫變數
+let backgroundPoints;
+
 function preload() {
   // Load the bodyPose model
   bodyPoseDetector = ml5.bodyPose('BlazePose', { flipped: true });
@@ -65,6 +73,7 @@ function preload() {
   // fonts
   myFont = loadFont('assets/font/Favorit-Inter.otf');
   myFontBold = loadFont('assets/font/Favorit-Bold.otf');
+  pilowlavaFont = loadFont('assets/font/Pilowlava-Atome.otf');
 }
 
 function setup() {
@@ -77,6 +86,13 @@ function setup() {
 
   // 隨機選擇一個情緒
   currentEmotion = random(emotions);
+
+  // 初始化背景動畫
+  backgroundPoints = new ConnectionPoints(10);
+
+  // 創建動態文字
+  titleText = new DynamicText('TRACING THE UNSPOKEN', width/2, height/2 - 100, 72);
+  subtitleText = new DynamicText('Please stand in front of the camera', width/2, height/2 + 50, 32);
 
   // 創建攝影機串流
   try {
@@ -136,6 +152,11 @@ function draw() {
   
   // 顯示標題畫面階段
   if (showingTitle) {
+    // 更新和繪製背景動畫
+    backgroundPoints.update();
+    backgroundPoints.draw();
+    
+    // 繪製靜態文字
     textAlign(CENTER, CENTER);
     fill(255);
     
@@ -143,14 +164,14 @@ function draw() {
     let y = height/2;
     
     // 標題文字
-    textFont(myFontBold);
-    textSize(64);
-    text('TRACING THE UNSPOKEN', width/2, y);
+    textFont(pilowlavaFont);
+    textSize(108);
+    text('TRACING\nTHE\nUNSPOKEN', width/2, y - 100);
     
     // 副標題
     textFont(myFont);
-    textSize(24);
-    text('Please stand in front of the camera', width/2, y + 100);
+    textSize(32);
+    text('Please stand in front of the camera', width/2, height - 200);
     
     // 如果偵測到完整骨架，進入 showingPrompt 階段
     if (poses.length > 0 && isFullBodyDetected(poses[0])) {
@@ -610,9 +631,10 @@ function resetAll() {
   recordedPoses = [];
   startTime = millis();
   
-  // 隨機選擇新的情緒
-  currentEmotion = random(emotions);
+  // 重置背景動畫
+  backgroundPoints = new ConnectionPoints(25);
   
+  currentEmotion = random(emotions);
   resetButton.hide();
   downloadButton.hide();
   
