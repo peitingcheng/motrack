@@ -19,6 +19,8 @@ let showingTitle = true;
 let showingPrompt = false;
 let isCountingDown = false;
 const PROMPT_DURATION = 5000; // 提示文字顯示5秒
+const FADE_DURATION = 1000; // 淡入淡出時間1秒
+let textOpacity = 0; // 文字透明度
 const COUNTDOWN_DURATION = 3000; // 倒數3秒
 const RECORDING_DURATION = 5000; // 錄製5秒
 let isReplaying = false;
@@ -184,11 +186,54 @@ function draw() {
   
   // 顯示提示文字階段
   if (showingPrompt) {
-    textAlign(CENTER, CENTER);
-    fill(255);
+    textAlign(LEFT);
+    
+    // 計算淡入淡出的透明度
+    let currentTime = millis() - startTime;
+    if (currentTime < FADE_DURATION) {
+      // 淡入階段
+      textOpacity = map(currentTime, 0, FADE_DURATION, 0, 255);
+    } else if (currentTime > PROMPT_DURATION - FADE_DURATION) {
+      // 淡出階段
+      textOpacity = map(currentTime, PROMPT_DURATION - FADE_DURATION, PROMPT_DURATION, 255, 0);
+    } else {
+      // 完全顯示階段
+      textOpacity = 255;
+    }
+    
+    // 設置文字顏色和透明度
+    fill(255, textOpacity);
     
     // 計算文字位置
     let y = height/2;
+    
+    // 顯示介紹文字
+    textFont(myFont);
+    textSize(48);
+    text('Can you speak without words?\nUse your body to express ideas,\nemotions, and see how movement\nbecomes its own kind of language.', 100, y);
+    
+    if (millis() - startTime > PROMPT_DURATION) {
+      showingPrompt = false;
+      waitingToStart = true;
+      startTime = millis();
+    }
+    return;
+  }
+
+  // 等待開始錄製階段
+  if (waitingToStart) {
+    // 水平翻轉攝影機畫面
+    push();
+    translate(width, 0);
+    scale(-1, 1);
+    image(videoStream, 0, 0, width, height);
+    pop();
+    textAlign(CENTER, CENTER);
+    fill(255);
+    
+    // prompt
+    // 計算文字位置
+    let y = height/4;
     
     // "How do you express" 使用 Inter
     textFont(myFont);
@@ -210,18 +255,7 @@ function draw() {
       waitingToStart = true;
       startTime = millis();
     }
-    return;
-  }
 
-  // 等待開始錄製階段
-  if (waitingToStart) {
-    // 水平翻轉攝影機畫面
-    push();
-    translate(width, 0);
-    scale(-1, 1);
-    image(videoStream, 0, 0, width, height);
-    pop();
-    
     // 顯示骨架
     if (poses.length > 0) {
       // 繪製骨架連接線
