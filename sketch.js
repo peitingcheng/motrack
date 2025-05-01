@@ -16,11 +16,18 @@ const RECORD_INTERVAL = 333;
 // 新增計時相關變數
 let startTime = 0;
 let showingTitle = true;
+let showingIntro = false;
 let showingPrompt = false;
 let isCountingDown = false;
+const INTRO_DURATION = 5000; // 介紹文字顯示5秒
 const PROMPT_DURATION = 5000; // 提示文字顯示5秒
 const FADE_DURATION = 1000; // 淡入淡出時間1秒
+const TEXT_MOVE_DELAY = 3000; // 文字移動延遲時間
+const TEXT_MOVE_DURATION = 1000; // 文字移動時間
 let textOpacity = 0; // 文字透明度
+let promptY = 0; // 文字Y軸位置
+const PROMPT_CENTER_Y = 540; // 中央位置
+const PROMPT_TOP_Y = 120; // 最終位置
 const COUNTDOWN_DURATION = 3000; // 倒數3秒
 const RECORDING_DURATION = 5000; // 錄製5秒
 let isReplaying = false;
@@ -68,6 +75,24 @@ let currentEmotion;
 // 新增背景動畫變數
 let backgroundPoints;
 
+// 新增 result display 變數
+let resultDisplay;
+
+// 新增國籍選擇相關變數
+let showingNationality = false;
+let nationalities = [
+  "Asia",
+  "Africa",
+  "North America",
+  "South America",
+  "Europe",
+  "Australia"
+];
+let selectedNationality = null;
+let nationalitySelectionStartTime = 0;
+const NATIONALITY_SELECTION_DURATION = 2000; // 需要保持選擇2秒
+let isSelectingNationality = false;
+
 function preload() {
   // Load the bodyPose model
   bodyPoseDetector = ml5.bodyPose('BlazePose', { flipped: true });
@@ -76,6 +101,11 @@ function preload() {
   myFont = loadFont('assets/font/Favorit-Inter.otf');
   myFontBold = loadFont('assets/font/Favorit-Bold.otf');
   pilowlavaFont = loadFont('assets/font/Pilowlava-Atome.otf');
+
+  //UI
+  gradient = loadImage('assets/UI/MoTrack-UI.png');
+  gradientBottom = loadImage('assets/UI/MoTrack-Gradient.png');
+  yposeUI = loadImage('assets/UI/MoTrack-YPOSE2.png');
 }
 
 function setup() {
@@ -147,6 +177,14 @@ function setup() {
 
   // 開始檢測骨架
   bodyPoseDetector.detectStart(videoStream, gotPoses);
+
+  // 初始化 result display
+  resultDisplay = new ResultDisplay();
+  resultDisplay.setup();
+  
+  // 設定重置和下載事件處理器
+  window.onReset = resetAll;
+  window.onDownload = downloadRecording;
 }
 
 function draw() {
@@ -175,17 +213,17 @@ function draw() {
     textSize(32);
     text('Please stand in front of the camera', width/2, height - 200);
     
-    // 如果偵測到完整骨架，進入 showingPrompt 階段
+    // 如果偵測到完整骨架，進入 showing 階段
     if (poses.length > 0 && isFullBodyDetected(poses[0])) {
       showingTitle = false;
-      showingPrompt = true;
+      showingIntro = true;
       startTime = millis();
     }
     return;
   }
   
   // 顯示提示文字階段
-  if (showingPrompt) {
+  if (showingIntro) {
     textAlign(LEFT);
     
     // 計算淡入淡出的透明度
@@ -193,9 +231,9 @@ function draw() {
     if (currentTime < FADE_DURATION) {
       // 淡入階段
       textOpacity = map(currentTime, 0, FADE_DURATION, 0, 255);
-    } else if (currentTime > PROMPT_DURATION - FADE_DURATION) {
+    } else if (currentTime > INTRO_DURATION - FADE_DURATION) {
       // 淡出階段
-      textOpacity = map(currentTime, PROMPT_DURATION - FADE_DURATION, PROMPT_DURATION, 255, 0);
+      textOpacity = map(currentTime, INTRO_DURATION - FADE_DURATION, INTRO_DURATION, 255, 0);
     } else {
       // 完全顯示階段
       textOpacity = 255;
@@ -209,14 +247,124 @@ function draw() {
     
     // 顯示介紹文字
     textFont(myFont);
+    textSize(72);
+    text('Can you speak\nwithout words?', 100, y-100);
+
     textSize(48);
-    text('Can you speak without words?\nUse your body to express ideas,\nemotions, and see how movement\nbecomes its own kind of language.', 100, y);
+    text('Use your body to express ideas,\nemotions, and see how movement\nbecomes its own kind of language.', 100, y+140);
     
-    if (millis() - startTime > PROMPT_DURATION) {
-      showingPrompt = false;
-      waitingToStart = true;
+    if (millis() - startTime > INTRO_DURATION) {
+      showingIntro = false;
+      showingNationality = true;
       startTime = millis();
     }
+    return;
+  }
+
+  // 顯示國籍選擇階段
+  if (showingNationality) {
+    // 水平翻轉攝影機畫面
+    push();
+    translate(width, 0);
+    scale(-1, 1);
+    image(videoStream, 0, 0, width, height);
+    image(gradient, 0, 0, width, height);
+    image(gradientBottom, 0, 0, width, height);
+    pop();
+    
+    // 顯示標題
+    push();  // 保存當前繪圖狀態
+    textAlign(CENTER, CENTER);
+    textFont(myFont);
+    textSize(72);
+    noStroke();  // 確保標題沒有外框
+    fill(255);
+    text('Select your nationality', width/2, 200);
+    pop();  // 恢復之前的繪圖狀態
+    
+    // 計算圓形選項的位置
+    let circleRadius = 120;
+    let circleSpacing = 50;
+    let totalWidth = (circleRadius * 2 * 3) + (circleSpacing * 2);
+    let startX = (width - totalWidth) / 2 + circleRadius;
+    let startY = height/2;
+    
+    // 第一排三個選項
+    for (let i = 0; i < 3; i++) {
+      let x = startX + i * (circleRadius * 2 + circleSpacing);
+      let y = startY - circleRadius - circleSpacing/2;
+      let isSelected = selectedNationality === i;
+      
+      // 繪製圓形背景
+      noStroke();
+      if (isSelected) {
+        fill(255, 100);  // 選中時完全不透明
+      } else {
+        fill(255, 70);   // 未選中時較高透明度
+      }
+      circle(x, y, circleRadius * 2);
+      
+      // 繪製選項文字
+      fill(255);
+      textSize(32);
+      textAlign(CENTER, CENTER);
+      text(nationalities[i], x, y);
+      
+      // 如果正在選擇，顯示進度條
+      if (isSelectingNationality && isSelected) {
+        let progress = (millis() - nationalitySelectionStartTime) / NATIONALITY_SELECTION_DURATION;
+        progress = constrain(progress, 0, 1);
+        
+        // 繪製圓形進度條
+        noFill();
+        stroke(255, 50);
+        strokeWeight(5);
+        circle(x, y, circleRadius * 2);
+        
+        stroke(255);
+        strokeWeight(5);
+        arc(x, y, circleRadius * 2, circleRadius * 2, -HALF_PI, -HALF_PI + TWO_PI * progress);
+      }
+    }
+    
+    // 第二排三個選項
+    for (let i = 3; i < 6; i++) {
+      let x = startX + (i - 3) * (circleRadius * 2 + circleSpacing);
+      let y = startY + circleRadius + circleSpacing/2;
+      let isSelected = selectedNationality === i;
+      
+      // 繪製圓形背景
+      noStroke();
+      if (isSelected) {
+        fill(255, 100);  // 選中時完全不透明
+      } else {
+        fill(255, 70);   // 未選中時較高透明度
+      }
+      circle(x, y, circleRadius * 2);
+      
+      // 繪製選項文字
+      fill(255);
+      textSize(32);
+      textAlign(CENTER, CENTER);
+      text(nationalities[i], x, y);
+      
+      // 如果正在選擇，顯示進度條
+      if (isSelectingNationality && isSelected) {
+        let progress = (millis() - nationalitySelectionStartTime) / NATIONALITY_SELECTION_DURATION;
+        progress = constrain(progress, 0, 1);
+        
+        // 繪製圓形進度條
+        noFill();
+        stroke(255, 50);
+        strokeWeight(5);
+        circle(x, y, circleRadius * 2);
+        
+        stroke(255);
+        strokeWeight(5);
+        arc(x, y, circleRadius * 2, circleRadius * 2, -HALF_PI, -HALF_PI + TWO_PI * progress);
+      }
+    }
+    
     return;
   }
 
@@ -227,28 +375,43 @@ function draw() {
     translate(width, 0);
     scale(-1, 1);
     image(videoStream, 0, 0, width, height);
+    image(gradient, 0, 0, width, height);
+    image(yposeUI, 0, 0, width, height);
     pop();
+    
     textAlign(CENTER, CENTER);
     fill(255);
     
     // prompt
     // 計算文字位置
-    let y = height/4;
+    let currentTime = millis() - startTime;
+    
+    // if (currentTime < TEXT_MOVE_DELAY) {
+    //   // 前3秒保持在中央
+    //   promptY = height/2;
+    // } else if (currentTime < TEXT_MOVE_DELAY + TEXT_MOVE_DURATION) {
+    //   // 在1秒內移動到頂部
+    //   let moveProgress = (currentTime - TEXT_MOVE_DELAY) / TEXT_MOVE_DURATION;
+    //   promptY = lerp(height/2, 180, moveProgress);
+    // } else {
+    //   // 保持在頂部
+    //   promptY = 180;
+    // }
     
     // "How do you express" 使用 Inter
     textFont(myFont);
-    textSize(48);
-    text('How do you express', width/2, y - 60);
+    textSize(64);
+    text('How do you express', width/2, 140);
     
     // 當前選擇的情緒 使用 Medium
     textFont(myFontBold);
-    textSize(48);
-    text(`"${currentEmotion}"`, width/2, y);
+    textSize(64);
+    text(`"${currentEmotion}"`, width/2, 220);
     
     // "with your body?" 使用 Inter
     textFont(myFont);
-    textSize(48);
-    text('with your body?', width/2, y + 60);
+    textSize(64);
+    text('with your body?', width/2, 300);
     
     if (millis() - startTime > PROMPT_DURATION) {
       showingPrompt = false;
@@ -288,19 +451,87 @@ function draw() {
     
     // 顯示提示文字
     textAlign(CENTER, CENTER);
-    fill(255);
     textFont(myFont);
     textSize(32);
     
-    if (isHoldingYPose) {
-      // 顯示保持 Y-pose 的進度
-      let progress = (millis() - yPoseStartTime) / YPOSE_HOLD_DURATION;
-      let progressText = `Hold Y-pose: ${ceil(progress * 100)}%`;
-      text(progressText, width/2, height - 200);
+    // 計算淡入淡出的透明度
+    currentTime = millis() - startTime;
+    if (currentTime < FADE_DURATION) {
+      // 淡入階段
+      textOpacity = map(currentTime, 0, FADE_DURATION, 0, 255);
+    } else if (currentTime > PROMPT_DURATION - FADE_DURATION) {
+      // 淡出階段
+      textOpacity = map(currentTime, PROMPT_DURATION - FADE_DURATION, PROMPT_DURATION, 255, 0);
     } else {
-      text('Make a Y-pose to start recording', width/2, height - 200);
+      // 完全顯示階段
+      textOpacity = 255;
     }
     
+    if (isHoldingYPose) {
+      // 計算進度
+      let progress = (millis() - yPoseStartTime) / YPOSE_HOLD_DURATION;
+      progress = constrain(progress, 0, 1); // 確保進度在0到1之間
+      
+      // 繪製進度條背景
+      let barWidth = 400;
+      let barHeight = 20;
+      let barX = width/2 - barWidth/2;
+      let barY = height - 200;
+      
+      noStroke();
+      fill(255, 50); // 半透明背景
+      rect(barX, barY, barWidth, barHeight, 10);
+      
+      // 繪製進度條
+      fill(255, textOpacity);
+      rect(barX, barY, barWidth * progress, barHeight, 10);
+      
+      // 繪製進度文字
+      fill(255, textOpacity);
+      textSize(24);
+      textAlign(CENTER, CENTER);
+      text(`${ceil(progress * 100)}%`, width/2, barY + barHeight + 20);
+    } else {
+      fill(255, textOpacity);
+      text('When you\'re ready\nmake a Y-pose to start recording', width/2, height - 200);
+    }
+    
+    if (millis() - startTime > PROMPT_DURATION) {
+      showing = false;
+      waitingToStart = true;
+      startTime = millis();
+    }
+
+    // // 顯示骨架
+    // if (poses.length > 0) {
+    //   // 繪製骨架連接線
+    //   for (let connection of connections) {
+    //     let pointA = poses[0].keypoints[connection[0]];
+    //     let pointB = poses[0].keypoints[connection[1]];
+    //     if (pointA.confidence > 0.1 && pointB.confidence > 0.1) {
+    //       stroke(255, 0, 0); // 紅色線條
+    //       strokeWeight(3);
+    //       line(pointA.x, pointA.y, pointB.x, pointB.y);
+    //     }
+    //   }
+      
+    //   // 繪製關鍵點和標籤
+    //   for (let keypoint of poses[0].keypoints) {
+    //     if (keypoint.confidence > 0.1) {
+    //       // 繪製點
+    //       fill(255, 0, 0); // 紅色點
+    //       noStroke();
+    //       circle(keypoint.x, keypoint.y, 8);
+          
+    //       // 添加英文標籤
+    //       fill(255);
+    //       textSize(50);
+    //       textAlign(LEFT, CENTER);
+    //       text(keypoint.name, keypoint.x + 10, keypoint.y);
+    //     }
+    //   }
+    // }
+
     return;
   }
 
@@ -311,13 +542,29 @@ function draw() {
     translate(width, 0);
     scale(-1, 1);
     image(videoStream, 0, 0, width, height);
+    image(gradient, 0, 0, width, height);
+    image(yposeUI, 0, 0, width, height);
     pop();
     
+    // 顯示倒數數字
     let timeLeft = ceil((COUNTDOWN_DURATION - (millis() - startTime)) / 1000);
     textSize(128);
     textAlign(CENTER, CENTER);
     fill(255);
     text(timeLeft, width/2, height/2);
+
+    // 顯示情緒提示
+    textFont(myFont);
+    textSize(64);
+    text('How do you express', width/2, 140);
+    
+    textFont(myFontBold);
+    textSize(64);
+    text(`"${currentEmotion}"`, width/2, 220);
+    
+    textFont(myFont);
+    textSize(64);
+    text('with your body?', width/2, 300);
 
     if (millis() - startTime > COUNTDOWN_DURATION) {
       isCountingDown = false;
@@ -335,7 +582,22 @@ function draw() {
     translate(width, 0);
     scale(-1, 1);
     image(videoStream, 0, 0, width, height);
+    image(gradient, 0, 0, width, height);
     pop();
+    
+    // 顯示情緒提示
+    textAlign(CENTER, CENTER);
+    textFont(myFont);
+    textSize(64);
+    text('How do you express', width/2, 140);
+    
+    textFont(myFontBold);
+    textSize(64);
+    text(`"${currentEmotion}"`, width/2, 220);
+    
+    textFont(myFont);
+    textSize(64);
+    text('with your body?', width/2, 300);
     
     // 檢查是否達到錄製時間
     if (millis() - startTime > RECORDING_DURATION) {
@@ -343,7 +605,7 @@ function draw() {
       bodyPoseDetector.detectStop();
       poses = [];
       isReplaying = true;
-      replayStartTime = millis();
+      resultDisplay.startReplay();
     }
     
     // 記錄姿勢
@@ -358,11 +620,12 @@ function draw() {
 
     // 顯示剩餘錄製時間
     let recordingTimeLeft = ceil((RECORDING_DURATION - (millis() - startTime)) / 1000);
-    textSize(32);
-    textAlign(RIGHT, TOP);
+    push();
+    textSize(64);
+    textAlign(CENTER, TOP);
     fill(255);
-    text(recordingTimeLeft, width - 20, 20);
-
+    text(recordingTimeLeft, width/2, 400);
+    pop();
     // 即時骨架 - 使用當前的色相
     if (poses.length > 0) {
       push();
@@ -382,39 +645,8 @@ function draw() {
 
   // 重播階段
   if (isReplaying) {
-    // 水平翻轉攝影機畫面
-    push();
-    translate(width, 0);
-    scale(-1, 1);
-    
-    
-    // 顯示 reset 和 download 按鈕
-    resetButton.show();
-    downloadButton.show();
-    
-    let replayTime = millis() - replayStartTime;
-    let frameIndex = Math.floor((replayTime / RECORDING_DURATION) * recordedPoses.length);
-    
-    // 重播結束時重新開始
-    if (frameIndex >= recordedPoses.length) {
-      replayStartTime = millis();
-      frameIndex = 0;
-    }
-    
-    // 使用時間戳記來更精確地重播
-    let currentPose = recordedPoses[frameIndex];
-    if (currentPose) {
-      drawPoseSet(
-        [{ keypoints: currentPose.keypoints }],
-        color(currentHue, 80, 90, 255),
-        color((currentHue + 120) % 360, 80, 90, 255),
-        color((currentHue + 240) % 360, 80, 90, 255),
-        color((currentHue + 30) % 360, 80, 90, 255),
-        color((currentHue - 30) % 360, 80, 90, 255)
-      );
-    }
-    pop();
-    
+    resultDisplay.draw(videoStream, recordedPoses, currentHue, drawPoseSet);
+    return;
   } else {
     // 確保在非重播階段隱藏按鈕
     resetButton.hide();
@@ -565,12 +797,73 @@ function isFullBodyDetected(pose) {
 function gotPoses(results) {
   poses = results;
   
-  // 在標題畫面階段，只檢查是否偵測到完整骨架
   if (showingTitle) {
+    if (poses.length > 0 && isFullBodyDetected(poses[0])) {
+      showingTitle = false;
+      showingIntro = true;
+      startTime = millis();
+    }
     return;
   }
   
-  // 其他階段的處理保持不變
+  if (showingIntro) {
+    if (millis() - startTime > INTRO_DURATION) {
+      showingIntro = false;
+      showingNationality = true;
+    }
+    return;
+  }
+  
+  if (showingNationality && poses.length > 0) {
+    let pose = poses[0];
+    let rightHand = pose.keypoints.find(k => k.name === 'right_wrist');
+    let leftHand = pose.keypoints.find(k => k.name === 'left_wrist');
+    
+    if (rightHand && leftHand && rightHand.confidence > 0.5 && leftHand.confidence > 0.5) {
+      let circleRadius = 120;
+      let circleSpacing = 50;
+      let totalWidth = (circleRadius * 2 * 3) + (circleSpacing * 2);
+      let startX = (width - totalWidth) / 2 + circleRadius;
+      let startY = height/2;
+      
+      // 檢查手部位置是否在圓形選項範圍內
+      for (let i = 0; i < nationalities.length; i++) {
+        let x, y;
+        if (i < 3) {
+          x = startX + i * (circleRadius * 2 + circleSpacing);
+          y = startY - circleRadius - circleSpacing/2;
+        } else {
+          x = startX + (i - 3) * (circleRadius * 2 + circleSpacing);
+          y = startY + circleRadius + circleSpacing/2;
+        }
+        
+        // 計算手部到圓心的距離
+        let rightHandDist = dist(rightHand.x, rightHand.y, x, y);
+        let leftHandDist = dist(leftHand.x, leftHand.y, x, y);
+        
+        if (rightHandDist <= circleRadius || leftHandDist <= circleRadius) {
+          if (selectedNationality !== i) {
+            selectedNationality = i;
+            isSelectingNationality = true;
+            nationalitySelectionStartTime = millis();
+          }
+          
+          if (isSelectingNationality && 
+              millis() - nationalitySelectionStartTime > NATIONALITY_SELECTION_DURATION) {
+            showingNationality = false;
+            waitingToStart = true;
+            startTime = millis();
+          }
+          break;
+        } else if (selectedNationality === i) {
+          selectedNationality = null;
+          isSelectingNationality = false;
+        }
+      }
+    }
+    return;
+  }
+  
   if (poses.length > 0) {
     // 檢查是否為 Y-pose
     if (isYPose(poses[0])) {
@@ -654,13 +947,17 @@ function downloadRecording() {
 // 修改重置函數
 function resetAll() {
   showingTitle = true;
+  showingIntro = false;
   showingPrompt = false;
+  showingNationality = false;
   waitingToStart = false;
   isCountingDown = false;
   isDetecting = false;
   isReplaying = false;
-  isHoldingYPose = false; // 重置 Y-pose 狀態
-  isYPoseLocked = false; // 解鎖 Y-pose 檢測
+  isHoldingYPose = false;
+  isYPoseLocked = false;
+  selectedNationality = null;
+  isSelectingNationality = false;
   poses = [];
   recordedPoses = [];
   startTime = millis();
@@ -668,10 +965,12 @@ function resetAll() {
   // 重置背景動畫
   backgroundPoints = new ConnectionPoints(25);
   
+  // 重置情緒動畫
   currentEmotion = random(emotions);
-  resetButton.hide();
-  downloadButton.hide();
   
   // 停止骨架偵測
   bodyPoseDetector.detectStop();
+  
+  resetButton.hide();
+  downloadButton.hide();
 }
