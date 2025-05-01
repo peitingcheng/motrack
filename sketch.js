@@ -79,6 +79,22 @@ let backgroundPoints;
 let resultDisplay;
 
 // 新增國籍選擇相關變數
+let showingAge = false;
+let ageGroups = [
+  "0-10",
+  "11-20",
+  "21-30",
+  "31-40",
+  "41-50",
+  "51-60",
+  "61-70",
+  "70+"
+];
+let selectedAge = null;
+let ageSelectionStartTime = 0;
+const AGE_SELECTION_DURATION = 2000; // 需要保持選擇2秒
+let isSelectingAge = false;
+
 let showingNationality = false;
 let nationalities = [
   "Asia",
@@ -255,9 +271,118 @@ function draw() {
     
     if (millis() - startTime > INTRO_DURATION) {
       showingIntro = false;
-      showingNationality = true;
+      showingAge = true;
       startTime = millis();
     }
+    return;
+  }
+
+  // 顯示年齡選擇階段
+  if (showingAge) {
+    // 水平翻轉攝影機畫面
+    push();
+    translate(width, 0);
+    scale(-1, 1);
+    image(videoStream, 0, 0, width, height);
+    image(gradient, 0, 0, width, height);
+    image(gradientBottom, 0, 0, width, height);
+    pop();
+    
+    // 顯示標題
+    push();
+    textAlign(CENTER, CENTER);
+    textFont(myFont);
+    textSize(72);
+    noStroke();
+    fill(255);
+    text('Select your age group', width/2, 200);
+
+    textSize(32);
+    fill(255);
+    text('Move your hand to select your age group', width/2, height - 200);
+    pop();
+    
+    // 計算圓形選項的位置
+    let circleRadius = 100;
+    let circleSpacing = 30;
+    let totalWidth = (circleRadius * 2 * 4) + (circleSpacing * 3);
+    let startX = (width - totalWidth) / 2 + circleRadius;
+    let startY = height/2;
+    
+    // 第一排四個選項
+    for (let i = 0; i < 4; i++) {
+      let x = startX + i * (circleRadius * 2 + circleSpacing);
+      let y = startY - circleRadius - circleSpacing/2;
+      let isSelected = selectedAge === i;
+      
+      // 繪製圓形背景
+      noStroke();
+      if (isSelected) {
+        fill(255, 100);
+      } else {
+        fill(255, 70);
+      }
+      circle(x, y, circleRadius * 2);
+      
+      // 繪製選項文字
+      fill(255);
+      textSize(24);
+      textAlign(CENTER, CENTER);
+      text(ageGroups[i], x, y);
+      
+      // 如果正在選擇，顯示進度條
+      if (isSelectingAge && isSelected) {
+        let progress = (millis() - ageSelectionStartTime) / AGE_SELECTION_DURATION;
+        progress = constrain(progress, 0, 1);
+        
+        noFill();
+        stroke(255, 50);
+        strokeWeight(5);
+        circle(x, y, circleRadius * 2);
+        
+        stroke(255);
+        strokeWeight(5);
+        arc(x, y, circleRadius * 2, circleRadius * 2, -HALF_PI, -HALF_PI + TWO_PI * progress);
+      }
+    }
+    
+    // 第二排四個選項
+    for (let i = 4; i < 8; i++) {
+      let x = startX + (i - 4) * (circleRadius * 2 + circleSpacing);
+      let y = startY + circleRadius + circleSpacing/2;
+      let isSelected = selectedAge === i;
+      
+      // 繪製圓形背景
+      noStroke();
+      if (isSelected) {
+        fill(255, 100);
+      } else {
+        fill(255, 70);
+      }
+      circle(x, y, circleRadius * 2);
+      
+      // 繪製選項文字
+      fill(255);
+      textSize(24);
+      textAlign(CENTER, CENTER);
+      text(ageGroups[i], x, y);
+      
+      // 如果正在選擇，顯示進度條
+      if (isSelectingAge && isSelected) {
+        let progress = (millis() - ageSelectionStartTime) / AGE_SELECTION_DURATION;
+        progress = constrain(progress, 0, 1);
+        
+        noFill();
+        stroke(255, 50);
+        strokeWeight(5);
+        circle(x, y, circleRadius * 2);
+        
+        stroke(255);
+        strokeWeight(5);
+        arc(x, y, circleRadius * 2, circleRadius * 2, -HALF_PI, -HALF_PI + TWO_PI * progress);
+      }
+    }
+    
     return;
   }
 
@@ -280,6 +405,10 @@ function draw() {
     noStroke();  // 確保標題沒有外框
     fill(255);
     text('Select your nationality', width/2, 200);
+
+    textSize(32);
+    fill(255);
+    text('Move your hand to select your nationality', width/2, height - 200);
     pop();  // 恢復之前的繪圖狀態
     
     // 計算圓形選項的位置
@@ -493,7 +622,7 @@ function draw() {
       text(`${ceil(progress * 100)}%`, width/2, barY + barHeight + 20);
     } else {
       fill(255, textOpacity);
-      text('When you\'re ready\nmake a Y-pose to start recording', width/2, height - 200);
+      text('When you\'re ready\nraise your hands to start recording', width/2, height - 200);
     }
     
     if (millis() - startTime > PROMPT_DURATION) {
@@ -809,7 +938,57 @@ function gotPoses(results) {
   if (showingIntro) {
     if (millis() - startTime > INTRO_DURATION) {
       showingIntro = false;
-      showingNationality = true;
+      showingAge = true;
+    }
+    return;
+  }
+  
+  if (showingAge && poses.length > 0) {
+    let pose = poses[0];
+    let rightHand = pose.keypoints.find(k => k.name === 'right_wrist');
+    let leftHand = pose.keypoints.find(k => k.name === 'left_wrist');
+    
+    if (rightHand && leftHand && rightHand.confidence > 0.5 && leftHand.confidence > 0.5) {
+      let circleRadius = 100;
+      let circleSpacing = 30;
+      let totalWidth = (circleRadius * 2 * 4) + (circleSpacing * 3);
+      let startX = (width - totalWidth) / 2 + circleRadius;
+      let startY = height/2;
+      
+      // 檢查手部位置是否在圓形選項範圍內
+      for (let i = 0; i < ageGroups.length; i++) {
+        let x, y;
+        if (i < 4) {
+          x = startX + i * (circleRadius * 2 + circleSpacing);
+          y = startY - circleRadius - circleSpacing/2;
+        } else {
+          x = startX + (i - 4) * (circleRadius * 2 + circleSpacing);
+          y = startY + circleRadius + circleSpacing/2;
+        }
+        
+        // 計算手部到圓心的距離
+        let rightHandDist = dist(rightHand.x, rightHand.y, x, y);
+        let leftHandDist = dist(leftHand.x, leftHand.y, x, y);
+        
+        if (rightHandDist <= circleRadius || leftHandDist <= circleRadius) {
+          if (selectedAge !== i) {
+            selectedAge = i;
+            isSelectingAge = true;
+            ageSelectionStartTime = millis();
+          }
+          
+          if (isSelectingAge && 
+              millis() - ageSelectionStartTime > AGE_SELECTION_DURATION) {
+            showingAge = false;
+            showingNationality = true;
+            startTime = millis();
+          }
+          break;
+        } else if (selectedAge === i) {
+          selectedAge = null;
+          isSelectingAge = false;
+        }
+      }
     }
     return;
   }
@@ -949,6 +1128,7 @@ function resetAll() {
   showingTitle = true;
   showingIntro = false;
   showingPrompt = false;
+  showingAge = false;
   showingNationality = false;
   waitingToStart = false;
   isCountingDown = false;
@@ -956,6 +1136,8 @@ function resetAll() {
   isReplaying = false;
   isHoldingYPose = false;
   isYPoseLocked = false;
+  selectedAge = null;
+  isSelectingAge = false;
   selectedNationality = null;
   isSelectingNationality = false;
   poses = [];
