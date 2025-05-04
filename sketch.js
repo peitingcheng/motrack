@@ -1096,6 +1096,10 @@ function downloadRecording() {
     frameRate: 1000/RECORD_INTERVAL,
     emotion: currentEmotion,
     emotionIndex: emotionIndex,
+    ageGroup: ageGroups[selectedAge],
+    ageGroupIndex: selectedAge,
+    nationality: nationalities[selectedNationality],
+    nationalityIndex: selectedNationality,
     colors: {
       main: currentHue,
       secondary: (currentHue + 120) % 360,

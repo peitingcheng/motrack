@@ -4,8 +4,22 @@ class SkeletonAnimation {
     this.poses = [];
     this.currentFrame = 0;
     this.lastFrameTime = 0;
-    this.lineColor = lineColor || color(0, 80, 90, 255);
-    this.pointColor = pointColor || color(0, 80, 90, 255);
+    const palette = [
+      color(255, 236, 224), // Beige
+      color(0, 55, 123),   // Primary Blue
+      color(225, 55, 40),   // Bright Red
+      color(255, 190, 0), // Golden Yellow
+      color(190, 217, 239),  // Soft Sky Blue
+      color(100, 174, 207) // Light Gray Blue
+    ];
+    // Pick two different random colors for line and point
+    let idx1 = floor(random(palette.length));
+    let idx2;
+    do {
+      idx2 = floor(random(palette.length));
+    } while (idx2 === idx1);
+    this.lineColor = lineColor || palette[idx1];
+    this.pointColor = pointColor || palette[idx2];
     this.category = category; // 0-4 for different categories
     this.connections = [
       // 臉部連接
@@ -17,13 +31,18 @@ class SkeletonAnimation {
       [11, 23], [12, 24], [23, 24], [23, 25], [24, 26], [25, 27], [26, 28],
       [27, 29], [28, 30], [29, 31], [30, 32], [27, 31], [28, 32]
     ];
+    this.smoothedKeypoints = null;
+    this.keypointSizes = Array(33).fill(0).map((_, i) => {
+      return i <= 10 ? 0 : random(50, 80);
+    });
+    this.connectionCurves = this.connections.map(() => random(-20, 50));
   }
 
   // 添加靜態參數來控制網格尺寸
   static gridConfig = {
     cols: 4,
     rows: 4,
-    cellSize: 500, // 參考尺寸，可以調整這個值來改變網格大小
+    cellSize: 400, // Reduced from 500
     margin: 20     // 網格之間的間距
   };
 
@@ -38,16 +57,30 @@ class SkeletonAnimation {
     if (this.poses.length === 0) return;
 
     let now = millis();
-    if (now - this.lastFrameTime > 100) { //fps
+    if (now - this.lastFrameTime > 150) { //fps
       this.currentFrame = (this.currentFrame + 1) % this.poses.length;
       this.lastFrameTime = now;
+    }
+
+    // 取得當前幀的 keypoints
+    let currentKeypoints = this.poses[this.currentFrame].keypoints;
+
+    if (!this.smoothedKeypoints) {
+      this.smoothedKeypoints = currentKeypoints.map(kp => ({...kp}));
+    } else {
+      // 用 lerp 平滑每個 keypoint
+      for (let i = 0; i < currentKeypoints.length; i++) {
+        this.smoothedKeypoints[i].x = lerp(this.smoothedKeypoints[i].x, currentKeypoints[i].x, 0.3);
+        this.smoothedKeypoints[i].y = lerp(this.smoothedKeypoints[i].y, currentKeypoints[i].y, 0.3);
+        this.smoothedKeypoints[i].confidence = currentKeypoints[i].confidence; // 這個可以直接用
+      }
     }
   }
 
   draw() {
     if (this.poses.length === 0) return;
 
-    let currentPose = this.poses[this.currentFrame];
+    let currentPose = { keypoints: this.smoothedKeypoints || this.poses[this.currentFrame].keypoints };
     if (currentPose) {
       push();
       
@@ -67,8 +100,8 @@ class SkeletonAnimation {
       // Apply translation
       translate(x, y);
       
-      // Scale to fit the cell
-      const scaleFactor = Math.min(cellWidth, cellHeight) / cellSize;
+      // Scale to fit the cell with a safety margin
+      const scaleFactor = Math.min(cellWidth, cellHeight) / cellSize * 0.35;
       scale(scaleFactor);
 
       // 計算骨架的中心點
@@ -97,10 +130,10 @@ class SkeletonAnimation {
         [{ keypoints: currentPose.keypoints }],
         this.lineColor,
         this.pointColor,
-        color((hue(this.pointColor) + 120) % 360, 80, 90, 255),
-        color((hue(this.pointColor) + 240) % 360, 80, 90, 255),
-        color((hue(this.pointColor) + 30) % 360, 80, 90, 255),
-        color((hue(this.pointColor) - 30) % 360, 80, 90, 255)
+        // color((hue(this.pointColor) + 120) % 360, 80, 90, 255),
+        // color((hue(this.pointColor) + 240) % 360, 80, 90, 255),
+        // color((hue(this.pointColor) + 30) % 360, 80, 90, 255),
+        // color((hue(this.pointColor) - 30) % 360, 80, 90, 255)
       );
       pop();
     }
@@ -109,28 +142,33 @@ class SkeletonAnimation {
   drawPoseSet(poseSet, lineColor, pointColor1, pointColor2, pointColor3, pointColor4) {
     for (let pose of poseSet) {
       // 繪製骨架連接線
-      for (let connection of this.connections) {
+      this.connections.forEach((connection, i) => {
         let pointA = pose.keypoints[connection[0]];
         let pointB = pose.keypoints[connection[1]];
         if (pointA.confidence > 0.1 && pointB.confidence > 0.1) {
           stroke(lineColor);
-          strokeWeight(8);
-          line(pointA.x, pointA.y, pointB.x, pointB.y);
+          strokeWeight(30);
+          // 用固定曲度
+          let curveOffset = this.connectionCurves[i];
+          let cx = (pointA.x + pointB.x) / 2 + curveOffset;
+          let cy = (pointA.y + pointB.y) / 2 + curveOffset;
+          noFill();
+          beginShape();
+          vertex(pointA.x, pointA.y);
+          quadraticVertex(cx, cy, pointB.x, pointB.y);
+          endShape();
         }
-      }
+      });
 
       // 繪製關鍵點
-      for (let keypoint of pose.keypoints) {
+      pose.keypoints.forEach((keypoint, i) => {
         if (keypoint.confidence > 0.1) {
-          fill(pointColor1);
-          //noFill();
+          let pointColorWithAlpha = color(red(pointColor1), green(pointColor1), blue(pointColor1), 210);
+          fill(pointColorWithAlpha);
           noStroke();
-          //stroke(pointColor1);
-          strokeWeight(3);
-          circle(keypoint.x, keypoint.y, 10);
-          //circle(keypoint.x, keypoint.y, random(4, 30));
+          circle(keypoint.x, keypoint.y, this.keypointSizes[i]);
         }
-      }
+      });
     }
   }
 
@@ -146,14 +184,18 @@ let skeletonAnimations = [];
 // 添加情緒按鈕相關的變數和函數
 let currentEmotion = 1; // 當前選擇的情緒
 const emotionPaths = {
-  1: 'assets/SkeletonData/happy',
-  2: 'assets/SkeletonData/angry',
-  3: 'assets/SkeletonData/sad',
-  4: 'assets/SkeletonData/surprise'
+  1: 'assets/SkeletonData/0',
+  2: 'assets/SkeletonData/1',
+  3: 'assets/SkeletonData/2',
+  4: 'assets/SkeletonData/3',
+  5: 'assets/SkeletonData/4',
 };
 
 // 添加按鈕狀態追蹤
 let buttonPressed = 0; // 0表示沒有按鈕被按下，1-4表示對應的按鈕被按下
+let isMenuOpen = false; // 新增菜單狀態變數
+const menuWidth = 200; // 菜單寬度
+const menuItemHeight = 50; // 菜單項高度
 
 function preload() {
     // 請求檔案系統存取權限
@@ -195,8 +237,8 @@ function preload() {
   
           skeletonAnimations.push(new SkeletonAnimation(
             fullPath,
-            lineColor,
-            pointColor,
+            undefined,
+            undefined,
             category
           ));
         });
@@ -213,8 +255,8 @@ function preload() {
 
 function setup() {
   createCanvas(windowWidth, windowHeight);
-  background(0);
-  colorMode(HSB, 360, 100, 100, 255);
+  background(241, 222, 211);
+  colorMode(RGB, 255, 255, 255, 255);
 }
 
 function draw() {
@@ -254,100 +296,123 @@ function drawGridBoundaries() {
   }
 
   // 繪製網格標籤
-  textSize(12);
-  textAlign(CENTER, CENTER);
-  fill(255, 100);
-  noStroke();
+  // textSize(12);
+  // textAlign(CENTER, CENTER);
+  // fill(255, 100);
+  // noStroke();
   
-  for (let row = 0; row < rows; row++) {
-    for (let col = 0; col < cols; col++) {
-      const x = col * (cellWidth + margin) + margin + cellWidth / 2;
-      const y = row * (cellHeight + margin) + margin + cellHeight / 2;
-      text(`(${col + 1}, ${row + 1})`, x, y - cellHeight / 2 + 15);
-    }
-  }
+  // for (let row = 0; row < rows; row++) {
+  //   for (let col = 0; col < cols; col++) {
+  //     const x = col * (cellWidth + margin) + margin + cellWidth / 2;
+  //     const y = row * (cellHeight + margin) + margin + cellHeight / 2;
+  //     text(`(${col + 1}, ${row + 1})`, x, y - cellHeight / 2 + 15);
+  //   }
+  // }
 
   pop();
 }
 
 // 繪製情緒按鈕
 function drawEmotionButtons() {
-  const buttonWidth = 120;
-  const buttonHeight = 50;
-  const margin = 10;
-  const rightMargin = 32;
-  const startX = width - (buttonWidth + margin) * 4 - rightMargin;
-  const startY = margin;
+  const buttonSize = 40;
+  const margin = 20;
+  const x = width - buttonSize - margin;
+  const y = margin;
 
+  // 繪製漢堡菜單按鈕
   push();
-  textAlign(CENTER, CENTER);
+  noFill();
+  stroke(255, isMenuOpen ? 200 : 150);
+  strokeWeight(3);
+  rect(x, y, buttonSize, buttonSize, 25);
   
-  for (let i = 1; i <= 4; i++) {
-    const x = startX + (buttonWidth + margin) * (i - 1);
-    const y = startY;
-    
-    // 根據按鈕狀態設置顏色
-    let strokeAlpha = 255;
-    let fillAlpha = 255;
-    
-    if (buttonPressed === i) {
-      // 按鈕被按下的狀態
-      strokeAlpha = 200;
-      fillAlpha = 200;
-    } else if (currentEmotion === i) {
-      // 當前選中的狀態
-      strokeAlpha = 255;
-      fillAlpha = 255;
-    } else {
-      // 普通狀態
-      strokeAlpha = 150;
-      fillAlpha = 150;
-    }
-    
-    // 繪製按鈕背景（透明）
-    noFill();
-    stroke(255, strokeAlpha);
-    strokeWeight(3);
-    rect(x, y, buttonWidth, buttonHeight, 5);
-    
-    // 繪製按鈕文字
-    fill(255, fillAlpha);
-    noStroke();
-    textSize(18);
-    textStyle(BOLD);
-    text(`emo${i}`, x + buttonWidth/2, y + buttonHeight/2);
+  // 繪製漢堡圖標線條
+  stroke(255, isMenuOpen ? 200 : 150);
+  strokeWeight(2);
+  const lineSpacing = buttonSize / 4;
+  for (let i = 0; i < 3; i++) {
+    const lineY = y + lineSpacing * (i + 1);
+    line(x + 10, lineY, x + buttonSize - 10, lineY);
   }
-  
   pop();
+
+  // 如果菜單打開，繪製下拉選項
+  if (isMenuOpen) {
+    const emotionTexts = [
+      "I'm so happy",
+      "I love you",
+      "I'm so frustrated",
+      "I'm feeling sorrow",
+      "I'm so excited"
+    ];
+
+    push();
+    // 繪製菜單背景
+    fill(0, 200);
+    stroke(255, 150);
+    strokeWeight(2);
+    rect(x - menuWidth + buttonSize, y + buttonSize, menuWidth, emotionTexts.length * menuItemHeight, 5);
+
+    // 繪製菜單項
+    textAlign(LEFT, CENTER);
+    textSize(16);
+    for (let i = 0; i < emotionTexts.length; i++) {
+      const itemY = y + buttonSize + menuItemHeight * i + menuItemHeight/2;
+      
+      // 高亮當前選中的情緒
+      if (currentEmotion === i + 1) {
+        fill(255, 50);
+        noStroke();
+        rect(x - menuWidth + buttonSize, y + buttonSize + menuItemHeight * i, menuWidth, menuItemHeight);
+      }
+      
+      // 繪製文字
+      fill(255, currentEmotion === i + 1 ? 255 : 150);
+      noStroke();
+      text(emotionTexts[i], x - menuWidth + buttonSize + 10, itemY);
+    }
+    pop();
+  }
 }
 
 function mousePressed() {
-  const buttonWidth = 120;
-  const buttonHeight = 50;
-  const margin = 10;
-  const rightMargin = 32;
-  const startX = width - (buttonWidth + margin) * 4 - rightMargin;
-  const startY = margin;
+  const buttonSize = 40;
+  const margin = 20;
+  const x = width - buttonSize - margin;
+  const y = margin;
 
-  // 檢查是否點擊了情緒按鈕
-  for (let i = 1; i <= 4; i++) {
-    const x = startX + (buttonWidth + margin) * (i - 1);
-    const y = startY;
-    
-    if (mouseX >= x && mouseX <= x + buttonWidth &&
-        mouseY >= y && mouseY <= y + buttonHeight) {
-      buttonPressed = i; // 設置按鈕被按下的狀態
-      return;
+  // 檢查是否點擊了漢堡菜單按鈕
+  if (mouseX >= x && mouseX <= x + buttonSize &&
+      mouseY >= y && mouseY <= y + buttonSize) {
+    isMenuOpen = !isMenuOpen;
+    return;
+  }
+
+  // 如果菜單打開，檢查是否點擊了菜單項
+  if (isMenuOpen) {
+    const emotionTexts = [
+      "I'm so happy",
+      "I love you",
+      "I'm so frustrated",
+      "I'm feeling sorrow",
+      "I'm so excited"
+    ];
+
+    for (let i = 0; i < emotionTexts.length; i++) {
+      const itemY = y + buttonSize + menuItemHeight * i;
+      if (mouseX >= x - menuWidth + buttonSize && mouseX <= x + buttonSize &&
+          mouseY >= itemY && mouseY <= itemY + menuItemHeight) {
+        currentEmotion = i + 1;
+        isMenuOpen = false;
+        reloadAnimations();
+        return;
+      }
     }
   }
 }
 
 function mouseReleased() {
-  if (buttonPressed > 0) {
-    currentEmotion = buttonPressed;
-    reloadAnimations();
-  }
-  buttonPressed = 0; // 重置按鈕狀態
+  buttonPressed = 0;
 }
 
 // 重新載入動畫
@@ -384,8 +449,8 @@ function reloadAnimations() {
 
         skeletonAnimations.push(new SkeletonAnimation(
           fullPath,
-          lineColor,
-          pointColor,
+          undefined,
+          undefined,
           category
         ));
       });
