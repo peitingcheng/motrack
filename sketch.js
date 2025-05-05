@@ -30,7 +30,9 @@ const PROMPT_CENTER_Y = 540; // 中央位置
 const PROMPT_TOP_Y = 120; // 最終位置
 const COUNTDOWN_DURATION = 3000; // 倒數3秒
 const RECORDING_DURATION = 5000; // 錄製5秒
+const REPLAY_DURATION = 10000; // 重播持續12秒
 let isReplaying = false;
+let isShowingResult = false;
 let replayStartTime = 0;
 
 // 新增動態文字變數
@@ -72,6 +74,15 @@ const emotions = [
 // 新增當前情緒變數
 let currentEmotion;
 
+// 新增情緒路徑
+const emotionPaths = {
+  1: 'assets/SkeletonData/0',
+  2: 'assets/SkeletonData/1',
+  3: 'assets/SkeletonData/2',
+  4: 'assets/SkeletonData/3',
+  5: 'assets/SkeletonData/4',
+};
+
 // 新增背景動畫變數
 let backgroundPoints;
 
@@ -97,12 +108,14 @@ let isSelectingAge = false;
 
 let showingNationality = false;
 let nationalities = [
-  "Asia",
+  "East\nAsia",
+  "South &\nSoutheast\nAsia",
   "Africa",
-  "North America",
-  "South America",
   "Europe",
-  "Australia"
+  "Middle\nEast &\nCentral\nAsia",
+  "North\nAmerica",
+  "South\nAmerica",
+  "Oceania"
 ];
 let selectedNationality = null;
 let nationalitySelectionStartTime = 0;
@@ -127,13 +140,12 @@ function preload() {
 function setup() {
   createCanvas(1080, 1920);
   background(0);
-  // 設定使用 HSB 顏色模式
-  colorMode(HSB, 360, 100, 100, 255);
+  colorMode(RGB, 255, 255, 255, 255);
   // 產生隨機色相
   currentHue = random(360);
 
   // 隨機選擇一個情緒
-  currentEmotion = random(emotions);
+  currentEmotion = emotions[Math.floor(Math.random() * emotions.length)];
 
   // 初始化背景動畫
   backgroundPoints = new ConnectionPoints(10);
@@ -201,6 +213,11 @@ function setup() {
   // 設定重置和下載事件處理器
   window.onReset = resetAll;
   window.onDownload = downloadRecording;
+
+  // 初始化骨架動畫
+  setTimeout(() => {
+    initSkeletonAnimations();
+  }, 1000); // 延遲1秒初始化，確保所有資源都已載入
 }
 
 function draw() {
@@ -326,7 +343,7 @@ function draw() {
       
       // 繪製選項文字
       fill(255);
-      textSize(24);
+      textSize(32);
       textAlign(CENTER, CENTER);
       text(ageGroups[i], x, y);
       
@@ -363,7 +380,7 @@ function draw() {
       
       // 繪製選項文字
       fill(255);
-      textSize(24);
+      textSize(32);
       textAlign(CENTER, CENTER);
       text(ageGroups[i], x, y);
       
@@ -398,28 +415,28 @@ function draw() {
     pop();
     
     // 顯示標題
-    push();  // 保存當前繪圖狀態
+    push();
     textAlign(CENTER, CENTER);
     textFont(myFont);
     textSize(72);
-    noStroke();  // 確保標題沒有外框
+    noStroke();
     fill(255);
     text('Select your nationality', width/2, 200);
 
     textSize(32);
     fill(255);
     text('Move your hand to select your nationality', width/2, height - 200);
-    pop();  // 恢復之前的繪圖狀態
+    pop();
     
     // 計算圓形選項的位置
-    let circleRadius = 120;
-    let circleSpacing = 50;
-    let totalWidth = (circleRadius * 2 * 3) + (circleSpacing * 2);
+    let circleRadius = 100;
+    let circleSpacing = 30;
+    let totalWidth = (circleRadius * 2 * 4) + (circleSpacing * 3);
     let startX = (width - totalWidth) / 2 + circleRadius;
     let startY = height/2;
     
-    // 第一排三個選項
-    for (let i = 0; i < 3; i++) {
+    // 第一排四個選項
+    for (let i = 0; i < 4; i++) {
       let x = startX + i * (circleRadius * 2 + circleSpacing);
       let y = startY - circleRadius - circleSpacing/2;
       let isSelected = selectedNationality === i;
@@ -427,9 +444,9 @@ function draw() {
       // 繪製圓形背景
       noStroke();
       if (isSelected) {
-        fill(255, 100);  // 選中時完全不透明
+        fill(255, 100);
       } else {
-        fill(255, 70);   // 未選中時較高透明度
+        fill(255, 70);
       }
       circle(x, y, circleRadius * 2);
       
@@ -456,18 +473,18 @@ function draw() {
       }
     }
     
-    // 第二排三個選項
-    for (let i = 3; i < 6; i++) {
-      let x = startX + (i - 3) * (circleRadius * 2 + circleSpacing);
+    // 第二排四個選項
+    for (let i = 4; i < 8; i++) {
+      let x = startX + (i - 4) * (circleRadius * 2 + circleSpacing);
       let y = startY + circleRadius + circleSpacing/2;
       let isSelected = selectedNationality === i;
       
       // 繪製圓形背景
       noStroke();
       if (isSelected) {
-        fill(255, 100);  // 選中時完全不透明
+        fill(255, 100);
       } else {
-        fill(255, 70);   // 未選中時較高透明度
+        fill(255, 70);
       }
       circle(x, y, circleRadius * 2);
       
@@ -734,7 +751,7 @@ function draw() {
       bodyPoseDetector.detectStop();
       poses = [];
       isReplaying = true;
-      resultDisplay.startReplay();
+      replayStartTime = millis();
     }
     
     // 記錄姿勢
@@ -755,6 +772,7 @@ function draw() {
     fill(255);
     text(recordingTimeLeft, width/2, 400);
     pop();
+
     // 即時骨架 - 使用當前的色相
     if (poses.length > 0) {
       push();
@@ -774,12 +792,99 @@ function draw() {
 
   // 重播階段
   if (isReplaying) {
-    resultDisplay.draw(videoStream, recordedPoses, currentHue, drawPoseSet);
+    // 水平翻轉攝影機畫面
+    push();
+    translate(width, 0);
+    scale(-1, 1);
+    pop();
+    
+    // 顯示情緒提示
+    textAlign(CENTER, CENTER);
+    textFont(myFont);
+    textSize(64);
+    text('How do you express', width/2, 140);
+    
+    textFont(myFontBold);
+    textSize(64);
+    text(`"${currentEmotion}"`, width/2, 220);
+    
+    textFont(myFont);
+    textSize(64);
+    text('with your body?', width/2, 300);
+
+    // 重播錄製的姿勢
+    if (recordedPoses.length > 0) {
+      let currentTime = millis() - replayStartTime;
+      // 計算循環時間
+      let totalDuration = recordedPoses[recordedPoses.length - 1].timestamp;
+      currentTime = currentTime % totalDuration; // 使用取模運算來實現循環
+      
+      let currentPose = recordedPoses.find(pose => pose.timestamp >= currentTime) || recordedPoses[recordedPoses.length - 1];
+      
+      if (currentPose) {
+        push();
+        translate(width, 0);
+        scale(-1, 1);
+        drawPoseSet(
+          [{ keypoints: currentPose.keypoints }],
+          color(currentHue, 80, 90),
+          color((currentHue + 120) % 360, 80, 90),
+          color((currentHue + 240) % 360, 80, 90),
+          color((currentHue + 30) % 360, 80, 90),
+          color((currentHue - 30) % 360, 80, 90)
+        );
+        pop();
+      }
+    }
+    
+    // 檢查是否達到重播時間
+    if (millis() - replayStartTime > REPLAY_DURATION) {
+      isReplaying = false;
+      isShowingResult = true;
+      // Automatically download the recording
+      downloadRecording();
+    }
     return;
-  } else {
-    // 確保在非重播階段隱藏按鈕
-    resetButton.hide();
-    downloadButton.hide();
+  }
+
+  // 在重播階段之後顯示骨架動畫
+  if (isShowingResult) {
+    background(0);
+
+    // 更新和繪製骨架動畫
+    updateSkeletonAnimations();
+    drawSkeletonAnimations();
+
+    fill(0);
+    rect(width/4, height/4, width/2, height/2);
+    
+    // 繼續顯示重播的姿勢
+    if (recordedPoses.length > 0) {
+      let currentTime = millis() - replayStartTime;
+      // 計算循環時間
+      let totalDuration = recordedPoses[recordedPoses.length - 1].timestamp;
+      currentTime = currentTime % totalDuration; // 使用取模運算來實現循環
+      
+      let currentPose = recordedPoses.find(pose => pose.timestamp >= currentTime) || recordedPoses[recordedPoses.length - 1];
+      
+      if (currentPose) {
+        push();
+        translate(width/1.3, height/4);
+        scale(-0.5, 0.5);
+        drawPoseSet(
+          [{ keypoints: currentPose.keypoints }],
+          color(currentHue, 80, 90),
+          color((currentHue + 120) % 360, 80, 90),
+          color((currentHue + 240) % 360, 80, 90),
+          color((currentHue + 30) % 360, 80, 90),
+          color((currentHue - 30) % 360, 80, 90)
+        );
+        pop();
+      }
+
+      resetButton.show();
+      //downloadButton.show();
+    }
   }
 }
 
@@ -792,7 +897,7 @@ function drawPoseSet(poseSet, lineColor, pointColor1, pointColor2, pointColor3, 
       let pointB = pose.keypoints[connection[1]];
       if (pointA.confidence > 0.1 && pointB.confidence > 0.1) {
         stroke(lineColor);
-        strokeWeight(5);
+        strokeWeight(15);
         // 翻轉 x 座標
         let flippedAX = width - pointA.x;
         let flippedBX = width - pointB.x;
@@ -807,7 +912,7 @@ function drawPoseSet(poseSet, lineColor, pointColor1, pointColor2, pointColor3, 
         noStroke();
         // 翻轉 x 座標
         let flippedX = width - keypoint.x;
-        circle(flippedX, keypoint.y, 10);
+        circle(flippedX, keypoint.y, 15);
       }
     }
   } 
@@ -1001,18 +1106,18 @@ function gotPoses(results) {
     if (rightHand && leftHand && rightHand.confidence > 0.5 && leftHand.confidence > 0.5) {
       let circleRadius = 120;
       let circleSpacing = 50;
-      let totalWidth = (circleRadius * 2 * 3) + (circleSpacing * 2);
+      let totalWidth = (circleRadius * 2 * 4) + (circleSpacing * 3);
       let startX = (width - totalWidth) / 2 + circleRadius;
       let startY = height/2;
       
       // 檢查手部位置是否在圓形選項範圍內
       for (let i = 0; i < nationalities.length; i++) {
         let x, y;
-        if (i < 3) {
+        if (i < 4) {
           x = startX + i * (circleRadius * 2 + circleSpacing);
           y = startY - circleRadius - circleSpacing/2;
         } else {
-          x = startX + (i - 3) * (circleRadius * 2 + circleSpacing);
+          x = startX + (i - 4) * (circleRadius * 2 + circleSpacing);
           y = startY + circleRadius + circleSpacing/2;
         }
         
@@ -1129,6 +1234,7 @@ function downloadRecording() {
 
 // 修改重置函數
 function resetAll() {
+  // 重置所有顯示階段
   showingTitle = true;
   showingIntro = false;
   showingPrompt = false;
@@ -1138,25 +1244,69 @@ function resetAll() {
   isCountingDown = false;
   isDetecting = false;
   isReplaying = false;
+  isShowingResult = false;
+  
+  // 重置 Y-pose 相關狀態
   isHoldingYPose = false;
   isYPoseLocked = false;
+  yPoseStartTime = 0;
+  
+  // 重置選擇相關狀態
   selectedAge = null;
   isSelectingAge = false;
+  ageSelectionStartTime = 0;
   selectedNationality = null;
   isSelectingNationality = false;
+  nationalitySelectionStartTime = 0;
+  
+  // 重置時間相關變數
+  startTime = millis();
+  lastRecordTime = 0;
+  replayStartTime = 0;
+  
+  // 重置文字相關變數
+  textOpacity = 0;
+  promptY = 0;
+  
+  // 清空姿勢資料
   poses = [];
   recordedPoses = [];
-  startTime = millis();
   
   // 重置背景動畫
   backgroundPoints = new ConnectionPoints(25);
   
   // 重置情緒動畫
-  currentEmotion = random(emotions);
+  currentEmotion = emotions[Math.floor(Math.random() * emotions.length)];
   
-  // 停止骨架偵測
+  // 重置骨架動畫
+  skeletonAnimations = [];
+  setTimeout(() => {
+    initSkeletonAnimations();
+  }, 1000);
+  
+  // 停止並重新啟動骨架偵測
   bodyPoseDetector.detectStop();
+  setTimeout(() => {
+    bodyPoseDetector.detectStart(videoStream, gotPoses);
+  }, 100);
   
+  // 隱藏按鈕
   resetButton.hide();
   downloadButton.hide();
+}
+
+// 修改 mousePressed 函數
+function mousePressed() {
+  // 處理骨架動畫的滑鼠點擊
+  if (!isReplaying && !showingTitle && !showingIntro && !showingAge && !showingNationality && !waitingToStart && !isCountingDown && !isDetecting) {
+    handleSkeletonMousePressed();
+  }
+}
+
+// 修改開始重播的函數
+function startReplay() {
+  isReplaying = true;
+  replayStartTime = millis();
+  resetButton.show();
+  //downloadButton.show();
 }

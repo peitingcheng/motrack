@@ -129,17 +129,13 @@ class SkeletonAnimation {
       this.drawPoseSet(
         [{ keypoints: currentPose.keypoints }],
         this.lineColor,
-        this.pointColor,
-        // color((hue(this.pointColor) + 120) % 360, 80, 90, 255),
-        // color((hue(this.pointColor) + 240) % 360, 80, 90, 255),
-        // color((hue(this.pointColor) + 30) % 360, 80, 90, 255),
-        // color((hue(this.pointColor) - 30) % 360, 80, 90, 255)
+        this.pointColor
       );
       pop();
     }
   }
 
-  drawPoseSet(poseSet, lineColor, pointColor1, pointColor2, pointColor3, pointColor4) {
+  drawPoseSet(poseSet, lineColor, pointColor1) {
     for (let pose of poseSet) {
       // 繪製骨架連接線
       this.connections.forEach((connection, i) => {
@@ -181,93 +177,88 @@ class SkeletonAnimation {
 // 創建骨架動畫實例
 let skeletonAnimations = [];
 
-// 添加情緒按鈕相關的變數和函數
-let currentEmotion = 1; // 當前選擇的情緒
-const emotionPaths = {
-  1: 'assets/SkeletonData/0',
-  2: 'assets/SkeletonData/1',
-  3: 'assets/SkeletonData/2',
-  4: 'assets/SkeletonData/3',
-  5: 'assets/SkeletonData/4',
-};
-
 // 添加按鈕狀態追蹤
 let buttonPressed = 0; // 0表示沒有按鈕被按下，1-4表示對應的按鈕被按下
 let isMenuOpen = false; // 新增菜單狀態變數
 const menuWidth = 200; // 菜單寬度
 const menuItemHeight = 50; // 菜單項高度
 
-function preload() {
-    // 請求檔案系統存取權限
-    const skeletonDataDir = emotionPaths[1];
-    
-    // use fetch API read foler content
-    fetch(skeletonDataDir)
-      .then(response => {
-        if (!response.ok) {
-          throw new Error('Failed to access directory');
-        }
-        return response.text();
-      })
-      .then(html => {
-        // parse HTML to get file list
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(html, 'text/html');
-        const links = doc.querySelectorAll('a');
-        const files = Array.from(links)
-          .map(link => link.href.split('/').pop())
-          .filter(file => file.endsWith('.json'))
-          .slice(0, 16); // 只取前16個檔案
-        
-        console.log('Found JSON files:', files);
-        
-        // Process each JSON file
-        files.forEach((file, index) => {
-          // Calculate grid position (4x4 grid)
-          const category = index + 1; // 1-16
-          
-          // Use different colors for different animations
-          let hue = (index * 22.5) % 360; // 360/16 = 22.5 degrees per color
-          let lineColor = color(hue, 80, 190, 255);
-          let pointColor = color((hue + 120) % 360, 180, 90, 255);
-          
-          // Create the full path
-          const fullPath = `${skeletonDataDir}/${file}`;
-          console.log(`Loading animation ${index + 1}: ${fullPath} (Category: ${category})`);
+// 新增函數用於初始化骨架動畫
+function initSkeletonAnimations() {
+  // 獲取當前情緒的索引（從0開始）
+  const emotionIndex = emotions.indexOf(currentEmotion);
+  if (emotionIndex === -1) {
+    console.error('Invalid emotion:', currentEmotion);
+    return;
+  }
+
+  // 使用索引+1來獲取正確的路徑（因為emotionPaths使用1-5作為鍵）
+  const skeletonDataDir = emotionPaths[emotionIndex + 1];
+  if (!skeletonDataDir) {
+    console.error('Invalid emotion path for index:', emotionIndex);
+    return;
+  }
   
-          skeletonAnimations.push(new SkeletonAnimation(
-            fullPath,
-            undefined,
-            undefined,
-            category
-          ));
-        });
+  console.log('Loading skeleton data from:', skeletonDataDir);
   
-        // Load all animations
-        for (let animation of skeletonAnimations) {
-          animation.load();
-        }
-      })
-      .catch(error => {
-        console.error('Error accessing directory:', error);
+  fetch(skeletonDataDir)
+    .then(response => {
+      if (!response.ok) {
+        throw new Error('Failed to access directory');
+      }
+      return response.text();
+    })
+    .then(html => {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, 'text/html');
+      const links = doc.querySelectorAll('a');
+      const files = Array.from(links)
+        .map(link => link.href.split('/').pop())
+        .filter(file => file.endsWith('.json'))
+        .slice(0, 16);
+      
+      console.log('Found JSON files:', files);
+      
+      files.forEach((file, index) => {
+        const category = index + 1;
+        let hue = (index * 22.5) % 360;
+        let lineColor = color(hue, 80, 190, 255);
+        let pointColor = color((hue + 120) % 360, 180, 90, 255);
+        
+        const fullPath = `${skeletonDataDir}/${file}`;
+        console.log(`Loading animation ${index + 1}: ${fullPath} (Category: ${category})`);
+
+        skeletonAnimations.push(new SkeletonAnimation(
+          fullPath,
+          undefined,
+          undefined,
+          category
+        ));
       });
+
+      for (let animation of skeletonAnimations) {
+        animation.load();
+      }
+    })
+    .catch(error => {
+      console.error('Error accessing directory:', error);
+    });
 }
 
-function setup() {
-  createCanvas(windowWidth, windowHeight);
-  background(241, 222, 211);
-  colorMode(RGB, 255, 255, 255, 255);
+// 新增函數用於更新骨架動畫
+function updateSkeletonAnimations() {
+  for (let animation of skeletonAnimations) {
+    animation.update();
+  }
 }
 
-function draw() {
-  background(0);
-
+// 新增函數用於繪製骨架動畫
+function drawSkeletonAnimations() {
   // 繪製網格邊界
   drawGridBoundaries();
 
   // 更新並繪製所有骨架動畫
   for (let animation of skeletonAnimations) {
-    animation.update();
     animation.draw();
   }
 
@@ -294,21 +285,6 @@ function drawGridBoundaries() {
       rect(x, y, cellWidth, cellHeight);
     }
   }
-
-  // 繪製網格標籤
-  // textSize(12);
-  // textAlign(CENTER, CENTER);
-  // fill(255, 100);
-  // noStroke();
-  
-  // for (let row = 0; row < rows; row++) {
-  //   for (let col = 0; col < cols; col++) {
-  //     const x = col * (cellWidth + margin) + margin + cellWidth / 2;
-  //     const y = row * (cellHeight + margin) + margin + cellHeight / 2;
-  //     text(`(${col + 1}, ${row + 1})`, x, y - cellHeight / 2 + 15);
-  //   }
-  // }
-
   pop();
 }
 
@@ -320,21 +296,21 @@ function drawEmotionButtons() {
   const y = margin;
 
   // 繪製漢堡菜單按鈕
-  push();
-  noFill();
-  stroke(255, isMenuOpen ? 200 : 150);
-  strokeWeight(3);
-  rect(x, y, buttonSize, buttonSize, 25);
+  // push();
+  // noFill();
+  // stroke(255, isMenuOpen ? 200 : 150);
+  // strokeWeight(3);
+  // rect(x, y, buttonSize, buttonSize, 25);
   
-  // 繪製漢堡圖標線條
-  stroke(255, isMenuOpen ? 200 : 150);
-  strokeWeight(2);
-  const lineSpacing = buttonSize / 4;
-  for (let i = 0; i < 3; i++) {
-    const lineY = y + lineSpacing * (i + 1);
-    line(x + 10, lineY, x + buttonSize - 10, lineY);
-  }
-  pop();
+  // // 繪製漢堡圖標線條
+  // stroke(255, isMenuOpen ? 200 : 150);
+  // strokeWeight(2);
+  // const lineSpacing = buttonSize / 4;
+  // for (let i = 0; i < 3; i++) {
+  //   const lineY = y + lineSpacing * (i + 1);
+  //   line(x + 10, lineY, x + buttonSize - 10, lineY);
+  // }
+  // pop();
 
   // 如果菜單打開，繪製下拉選項
   if (isMenuOpen) {
@@ -375,7 +351,8 @@ function drawEmotionButtons() {
   }
 }
 
-function mousePressed() {
+// 新增函數用於處理滑鼠點擊
+function handleSkeletonMousePressed() {
   const buttonSize = 40;
   const margin = 20;
   const x = width - buttonSize - margin;
@@ -411,63 +388,8 @@ function mousePressed() {
   }
 }
 
-function mouseReleased() {
-  buttonPressed = 0;
-}
-
 // 重新載入動畫
 function reloadAnimations() {
   skeletonAnimations = [];
-  const skeletonDataDir = emotionPaths[currentEmotion];
-  
-  fetch(skeletonDataDir)
-    .then(response => {
-      if (!response.ok) {
-        throw new Error('Failed to access directory');
-      }
-      return response.text();
-    })
-    .then(html => {
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(html, 'text/html');
-      const links = doc.querySelectorAll('a');
-      const files = Array.from(links)
-        .map(link => link.href.split('/').pop())
-        .filter(file => file.endsWith('.json'))
-        .slice(0, 16);
-      
-      console.log('Found JSON files:', files);
-      
-      files.forEach((file, index) => {
-        const category = index + 1;
-        let hue = (index * 22.5) % 360; // 360/16 = 22.5 degrees per color
-        let lineColor = color(hue, 80, 190, 255);
-        let pointColor = color((hue + 120) % 360, 180, 90, 255);
-        
-        const fullPath = `${skeletonDataDir}/${file}`;
-        console.log(`Loading animation ${index + 1}: ${fullPath} (Category: ${category})`);
-
-        skeletonAnimations.push(new SkeletonAnimation(
-          fullPath,
-          undefined,
-          undefined,
-          category
-        ));
-      });
-
-      for (let animation of skeletonAnimations) {
-        animation.load();
-      }
-    })
-    .catch(error => {
-      console.error('Error accessing directory:', error);
-    });
-}
-
-// 添加新的骨架動畫
-function addNewSkeletonAnimation(jsonPath, lineColor, pointColor) {
-  let newAnimation = new SkeletonAnimation(jsonPath, lineColor, pointColor);
-  newAnimation.load();
-  skeletonAnimations.push(newAnimation);
-  return newAnimation;
+  initSkeletonAnimations();
 }
