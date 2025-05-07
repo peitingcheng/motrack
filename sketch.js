@@ -30,10 +30,11 @@ const PROMPT_CENTER_Y = 540; // 中央位置
 const PROMPT_TOP_Y = 120; // 最終位置
 const COUNTDOWN_DURATION = 3000; // 倒數3秒
 const RECORDING_DURATION = 5000; // 錄製5秒
-const REPLAY_DURATION = 10000; // 重播持續12秒
+const REPLAY_DURATION = 10000; // 重播持續10秒
 let isReplaying = false;
 let isShowingResult = false;
 let replayStartTime = 0;
+let resultDisplayStartTime = 0; // 新增：用於追蹤結果顯示時間
 
 // 新增動態文字變數
 let titleText;
@@ -121,6 +122,33 @@ let selectedNationality = null;
 let nationalitySelectionStartTime = 0;
 const NATIONALITY_SELECTION_DURATION = 2000; // 需要保持選擇2秒
 let isSelectingNationality = false;
+
+let menuHoverStartTime = null;
+let menuItemHoverStartTime = null;
+
+// 新增滑動條相關變數
+let selectedAgeFilter = 0;
+let selectedNationalityFilter = 0;
+let ageSliderValue = 0;
+let nationalitySliderValue = 0;
+let isDraggingAgeSlider = false;
+let isDraggingNationalitySlider = false;
+
+// 新增過濾器陣列
+const ageFilters = ["All", ...ageGroups];
+const nationalityFilters = ["All", ...nationalities];
+
+// 在全局變數區域添加新的變數
+let smoothedRightWristX = 0;
+let smoothedRightWristY = 0;
+let smoothedLeftWristX = 0;
+let smoothedLeftWristY = 0;
+const SMOOTHING_FACTOR = 0.2; // 平滑因子，值越小移動越平滑
+
+// 1. 定義 hover 狀態與計時
+let ageLeftHoverTime = null, ageRightHoverTime = null;
+let natLeftHoverTime = null, natRightHoverTime = null;
+const HOVER_DELAY = 500; // ms
 
 function preload() {
   // Load the bodyPose model
@@ -284,7 +312,7 @@ function draw() {
     text('Can you speak\nwithout words?', 100, y-100);
 
     textSize(48);
-    text('Use your body to express ideas,\nemotions, and see how movement\nbecomes its own kind of language.', 100, y+140);
+    text('Use your body to express emotions,\nand see how movement becomes\nits own kind of language.', 100, y+140);
     
     if (millis() - startTime > INTRO_DURATION) {
       showingIntro = false;
@@ -841,6 +869,7 @@ function draw() {
     if (millis() - replayStartTime > REPLAY_DURATION) {
       isReplaying = false;
       isShowingResult = true;
+      bodyPoseDetector.detectStart(videoStream, gotPoses);
       // Automatically download the recording
       downloadRecording();
     }
@@ -849,24 +878,29 @@ function draw() {
 
   // 在重播階段之後顯示骨架動畫
   if (isShowingResult) {
-    background(0);
+    // 如果是第一次進入這個階段，記錄開始時間
+    if (resultDisplayStartTime === 0) {
+      resultDisplayStartTime = millis();
+    }
 
-    // 更新和繪製骨架動畫
+    background(0);
     updateSkeletonAnimations();
     drawSkeletonAnimations();
 
     fill(0);
     rect(width/4, height/4, width/2, height/2);
-    
-    // 繼續顯示重播的姿勢
+
+    // 檢查是否已經顯示超過30秒
+    if (millis() - resultDisplayStartTime > 60000) { // 60000毫秒 = 60秒
+      resetAll(); // 重置所有狀態
+      return;
+    }
+
     if (recordedPoses.length > 0) {
       let currentTime = millis() - replayStartTime;
-      // 計算循環時間
       let totalDuration = recordedPoses[recordedPoses.length - 1].timestamp;
-      currentTime = currentTime % totalDuration; // 使用取模運算來實現循環
-      
+      currentTime = currentTime % totalDuration;
       let currentPose = recordedPoses.find(pose => pose.timestamp >= currentTime) || recordedPoses[recordedPoses.length - 1];
-      
       if (currentPose) {
         push();
         translate(width/1.3, height/4);
@@ -881,9 +915,95 @@ function draw() {
         );
         pop();
       }
-
-      resetButton.show();
-      //downloadButton.show();
+      //resetButton.show();
+    }
+    // --- 新filter UI ---
+    let cx = width - 150;
+    let cy1 = height/2 - 160;
+    let cy2 = height/2 + 140;
+    let arrowOffset = 80;
+    let arrowSize = 20;
+    // 取得手掌位置
+    let rx = smoothedRightWristX, ry = smoothedRightWristY;
+    // 年齡圓形
+    let ageLeftHover = dist(rx, ry, cx-arrowOffset, cy1) < 30;
+    let ageRightHover = dist(rx, ry, cx+arrowOffset, cy1) < 30;
+    // 國籍圓形
+    let natLeftHover = dist(rx, ry, cx-arrowOffset, cy2) < 30;
+    let natRightHover = dist(rx, ry, cx+arrowOffset, cy2) < 30;
+    // 年齡hover計時
+    if (ageLeftHover) {
+      if (!ageLeftHoverTime) ageLeftHoverTime = millis();
+      if (millis() - ageLeftHoverTime > HOVER_DELAY) {
+        selectedAgeFilter = (selectedAgeFilter - 1 + ageFilters.length) % ageFilters.length;
+        ageLeftHoverTime = millis();
+      }
+    } else { ageLeftHoverTime = null; }
+    if (ageRightHover) {
+      if (!ageRightHoverTime) 
+        ageRightHoverTime = millis();
+      if (millis() - ageRightHoverTime > HOVER_DELAY) {
+        selectedAgeFilter = (selectedAgeFilter + 1) % ageFilters.length;
+        ageRightHoverTime = millis();
+      }
+    } else { ageRightHoverTime = null; }
+    // 國籍hover計時
+    if (natLeftHover) {
+      if (!natLeftHoverTime) natLeftHoverTime = millis();
+      if (millis() - natLeftHoverTime > HOVER_DELAY) {
+        selectedNationalityFilter = (selectedNationalityFilter - 1 + nationalityFilters.length) % nationalityFilters.length;
+        natLeftHoverTime = millis();
+      }
+    } else { natLeftHoverTime = null; }
+    if (natRightHover) {
+      if (!natRightHoverTime) natRightHoverTime = millis();
+      if (millis() - natRightHoverTime > HOVER_DELAY) {
+        selectedNationalityFilter = (selectedNationalityFilter + 1) % nationalityFilters.length;
+        natRightHoverTime = millis();
+      }
+    } else { 
+      natRightHoverTime = null; 
+    }
+    // 畫圓形與箭頭
+    function drawFilterCircle(x, y, label, value, leftHover, rightHover) {
+      fill(0); 
+      stroke(255); 
+      strokeWeight(2);
+      ellipse(x, y, 160, 160);
+      noStroke(); 
+      fill(255); 
+      textAlign(CENTER, CENTER); 
+      textSize(24);
+      text(value, x, y);
+      // 左箭頭
+      fill(leftHover ? 'grey' : 255);
+      triangle(x-80, y, x-60, y-20, x-60, y+20);
+      // 右箭頭
+      fill(rightHover ? 'grey' : 255);
+      triangle(x+80, y, x+60, y-20, x+60, y+20);
+      // 標籤
+      fill(255); 
+      textSize(24);
+      text(label, x, y+100);
+    }
+    drawFilterCircle(cx, cy1, 'Age', ageFilters[selectedAgeFilter], ageLeftHover, ageRightHover);
+    drawFilterCircle(cx, cy2, 'Nationality', nationalityFilters[selectedNationalityFilter], natLeftHover, natRightHover);
+    // --- end filter UI ---
+    // 手部指示點
+    if (poses.length > 0) {
+      let pose = poses[0];
+      let rightWrist = pose.keypoints.find(k => k.name === 'right_wrist');
+      let leftWrist = pose.keypoints.find(k => k.name === 'left_wrist');
+      if (rightWrist && rightWrist.confidence > 0.5) {
+        smoothedRightWristX = lerp(smoothedRightWristX, rightWrist.x, SMOOTHING_FACTOR);
+        smoothedRightWristY = lerp(smoothedRightWristY, rightWrist.y, SMOOTHING_FACTOR);
+        push(); noStroke(); fill(255, 200); circle(smoothedRightWristX, smoothedRightWristY, 40); pop();
+      }
+      if (leftWrist && leftWrist.confidence > 0.5) {
+        smoothedLeftWristX = lerp(smoothedLeftWristX, leftWrist.x, SMOOTHING_FACTOR);
+        smoothedLeftWristY = lerp(smoothedLeftWristY, leftWrist.y, SMOOTHING_FACTOR);
+        push(); noStroke(); fill(255, 160); circle(smoothedLeftWristX, smoothedLeftWristY, 40); pop();
+      }
     }
   }
 }
@@ -1259,6 +1379,10 @@ function resetAll() {
   isSelectingNationality = false;
   nationalitySelectionStartTime = 0;
   
+  // 重置過濾器狀態
+  selectedAgeFilter = 0; // "All" 選項
+  selectedNationalityFilter = 0; // "All" 選項
+  
   // 重置時間相關變數
   startTime = millis();
   lastRecordTime = 0;
@@ -1307,6 +1431,6 @@ function mousePressed() {
 function startReplay() {
   isReplaying = true;
   replayStartTime = millis();
-  resetButton.show();
+  //resetButton.show();
   //downloadButton.show();
 }

@@ -36,6 +36,7 @@ class SkeletonAnimation {
       return i <= 10 ? 0 : random(50, 80);
     });
     this.connectionCurves = this.connections.map(() => random(-20, 50));
+    this.metadata = null; // 用於存儲JSON文件的元數據
   }
 
   // 添加靜態參數來控制網格尺寸
@@ -49,6 +50,11 @@ class SkeletonAnimation {
   load() {
     loadJSON(this.jsonPath, (data) => {
       this.poses = data.poses;
+      this.metadata = {
+        ageGroup: data.ageGroup,
+        nationality: data.nationality,
+        emotion: data.emotion
+      };
       console.log('Loaded poses:', this.poses.length);
     });
   }
@@ -77,8 +83,25 @@ class SkeletonAnimation {
     }
   }
 
+  shouldDisplay() {
+    // 如果沒有元數據，顯示所有動畫
+    if (!this.metadata) return true;
+    
+    // 檢查年齡過濾 - 只有當選擇了非初始位置時才過濾
+    if (selectedAgeFilter > 0 && this.metadata.ageGroup !== ageGroups[selectedAgeFilter]) {
+      return false;
+    }
+    
+    // 檢查國籍過濾 - 只有當選擇了非初始位置時才過濾
+    if (selectedNationalityFilter > 0 && this.metadata.nationality !== nationalities[selectedNationalityFilter]) {
+      return false;
+    }
+    
+    return true;
+  }
+
   draw() {
-    if (this.poses.length === 0) return;
+    if (this.poses.length === 0 || !this.shouldDisplay()) return;
 
     let currentPose = { keypoints: this.smoothedKeypoints || this.poses[this.currentFrame].keypoints };
     if (currentPose) {
@@ -313,42 +336,42 @@ function drawEmotionButtons() {
   // pop();
 
   // 如果菜單打開，繪製下拉選項
-  if (isMenuOpen) {
-    const emotionTexts = [
-      "I'm so happy",
-      "I love you",
-      "I'm so frustrated",
-      "I'm feeling sorrow",
-      "I'm so excited"
-    ];
+  // if (isMenuOpen) {
+  //   const emotionTexts = [
+  //     "I'm so happy",
+  //     "I love you",
+  //     "I'm so frustrated",
+  //     "I'm feeling sorrow",
+  //     "I'm so excited"
+  //   ];
 
-    push();
-    // 繪製菜單背景
-    fill(0, 200);
-    stroke(255, 150);
-    strokeWeight(2);
-    rect(x - menuWidth + buttonSize, y + buttonSize, menuWidth, emotionTexts.length * menuItemHeight, 5);
+  //   push();
+  //   // 繪製菜單背景
+  //   fill(0, 200);
+  //   stroke(255, 150);
+  //   strokeWeight(2);
+  //   rect(x - menuWidth + buttonSize, y + buttonSize, menuWidth, emotionTexts.length * menuItemHeight, 5);
 
-    // 繪製菜單項
-    textAlign(LEFT, CENTER);
-    textSize(16);
-    for (let i = 0; i < emotionTexts.length; i++) {
-      const itemY = y + buttonSize + menuItemHeight * i + menuItemHeight/2;
+  //   // 繪製菜單項
+  //   textAlign(LEFT, CENTER);
+  //   textSize(16);
+  //   for (let i = 0; i < emotionTexts.length; i++) {
+  //     const itemY = y + buttonSize + menuItemHeight * i + menuItemHeight/2;
       
-      // 高亮當前選中的情緒
-      if (currentEmotion === i + 1) {
-        fill(255, 50);
-        noStroke();
-        rect(x - menuWidth + buttonSize, y + buttonSize + menuItemHeight * i, menuWidth, menuItemHeight);
-      }
+  //     // 高亮當前選中的情緒
+  //     if (currentEmotion === i + 1) {
+  //       fill(255, 50);
+  //       noStroke();
+  //       rect(x - menuWidth + buttonSize, y + buttonSize + menuItemHeight * i, menuWidth, menuItemHeight);
+  //     }
       
-      // 繪製文字
-      fill(255, currentEmotion === i + 1 ? 255 : 150);
-      noStroke();
-      text(emotionTexts[i], x - menuWidth + buttonSize + 10, itemY);
-    }
-    pop();
-  }
+  //     // 繪製文字
+  //     fill(255, currentEmotion === i + 1 ? 255 : 150);
+  //     noStroke();
+  //     text(emotionTexts[i], x - menuWidth + buttonSize + 10, itemY);
+  //   }
+  //   pop();
+  // }
 }
 
 // 新增函數用於處理滑鼠點擊
@@ -393,3 +416,7 @@ function reloadAnimations() {
   skeletonAnimations = [];
   initSkeletonAnimations();
 }
+
+let cx = width / 2;
+let cy1 = height - 220;
+let cy2 = height - 100;
