@@ -888,10 +888,10 @@ function draw() {
     drawSkeletonAnimations();
 
     fill(0);
-    rect(width/4, height/4, width/2, height/2);
+    rect(width/4, height/4, width/4*3, height/2);
 
     // 檢查是否已經顯示超過30秒
-    if (millis() - resultDisplayStartTime > 60000) { // 60000毫秒 = 60秒
+    if (millis() - resultDisplayStartTime > 120000) { // 120000毫秒 = 120秒
       resetAll(); // 重置所有狀態
       return;
     }
